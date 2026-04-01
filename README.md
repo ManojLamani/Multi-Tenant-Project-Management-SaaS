@@ -1,11 +1,4 @@
 # Multi-Tenant Project Management SaaS (TaskForge)
-
-**Student Name:** Manoj Chandrappa Lamani  
-**Roll No:** 240410700117  
-**Year & Section:** 2024 and 4A  
-**Project Type:** Application Developer  
-**Stack / Framework:** Node.js, Express.js, MongoDB, React.js + Vite  
-
 ---
 
 ## 🚀 Getting Started (How to Run Locally)
