@@ -17,13 +17,20 @@ export const createTask = async (req, res) => {
             return res.status(404).json({ message: "Project not found or unauthorized" });
         }
 
-        const task = await Task.create({
+        const taskData = {
             title,
             description,
             status,
             projectId,
             workspaceId: req.user.workspaceId
-        });
+        };
+
+        if (status === 'done') {
+            taskData.completedBy = req.user._id;
+        }
+
+        const task = await Task.create(taskData);
+        await task.populate("completedBy", "name");
 
         res.status(201).json(task);
     } catch (error) {
@@ -38,7 +45,8 @@ export const createTask = async (req, res) => {
 export const getTasks = async (req, res) => {
     try {
         const tasks = await Task.find({ workspaceId: req.user.workspaceId })        
-            .populate("projectId", "name");
+            .populate("projectId", "name")
+            .populate("completedBy", "name");
         res.json(tasks);
     } catch (error) {
         console.error(error);
@@ -61,11 +69,19 @@ export const updateTask = async (req, res) => {
             return res.status(403).json({ message: "Not authorized to access this task" });
         }
 
+        // Logic for setting completedBy
+        if (req.body.status === 'done' && task.status !== 'done') {
+            req.body.completedBy = req.user._id;
+        } else if (req.body.status && req.body.status !== 'done') {
+            // Unset completedBy if status is moved away from done
+            req.body.$unset = { completedBy: 1 };
+        }
+
         const updatedTask = await Task.findByIdAndUpdate(
             req.params.id,
             req.body,
             { new: true }
-        );
+        ).populate("completedBy", "name");
 
         res.json(updatedTask);
     } catch (error) {
