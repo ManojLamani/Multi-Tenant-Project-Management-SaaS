@@ -16,7 +16,7 @@ const TaskSchema = new mongoose.Schema({
         ref: "Project",
         required: true
     },
-    assignedTo: {
+    completedBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User"
     },
