@@ -103,7 +103,7 @@ const Dashboard = () => {
     const handleMoveTask = async (taskId, newStatus) => {
         try {
             const res = await api.put(`/tasks/${taskId}`, { status: newStatus });
-            setTasks(tasks.map(t => t._id === taskId ? { ...t, status: res.data.status } : t));
+            setTasks(tasks.map(t => t._id === taskId ? { ...t, status: res.data.status, completedBy: res.data.completedBy } : t));
         } catch (error) {
             alert("Failed to update task status");
         }
