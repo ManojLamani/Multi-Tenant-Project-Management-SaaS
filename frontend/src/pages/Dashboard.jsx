@@ -154,6 +154,7 @@ const Dashboard = () => {
                     <TaskTable
                         project={selectedProject}
                         tasks={tasks}
+                        userRole={user.role}
                         canCreate={canCreate}
                         onBack={() => { setSelectedProject(null); setViewMode('projects'); }}
                         onCreateTask={handleCreateTask}
