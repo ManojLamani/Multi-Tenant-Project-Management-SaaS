@@ -1,7 +1,7 @@
 import React, { useState, memo } from 'react';
 
 // Memoized individual row to prevent the entire table from re-rendering when one task changes
-const TaskRow = memo(({ task, onMoveTask }) => {
+const TaskRow = memo(({ task, onMoveTask, userRole }) => {
     return (
         <tr key={task._id}>
             <td><strong>{task.title}</strong></td>
@@ -21,14 +21,16 @@ const TaskRow = memo(({ task, onMoveTask }) => {
                 >
                     <option value="todo">Todo</option>
                     <option value="in-progress">In Progress</option>
-                    <option value="done">Done</option>
+                    <option value="done" disabled={userRole === 'owner'}>
+                        Done {userRole === 'owner' ? '(Restricted)' : ''}
+                    </option>
                 </select>
             </td>
         </tr>
     );
 });
 
-const TaskTable = ({ project, tasks, canCreate, onBack, onCreateTask, onMoveTask }) => {
+const TaskTable = ({ project, tasks, userRole, canCreate, onBack, onCreateTask, onMoveTask }) => {
     // Local state for the "Add Task" form
     const [newTask, setNewTask] = useState({ 
         title: '', 
@@ -83,7 +85,9 @@ const TaskTable = ({ project, tasks, canCreate, onBack, onCreateTask, onMoveTask
                             >
                                 <option value="todo">Todo</option>
                                 <option value="in-progress">In Progress</option>
-                                <option value="done">Done</option>
+                                <option value="done" disabled={userRole === 'owner'}>
+                                    Done {userRole === 'owner' ? '(Restricted)' : ''}
+                                </option>
                             </select>
                         </div>
 
@@ -113,7 +117,8 @@ const TaskTable = ({ project, tasks, canCreate, onBack, onCreateTask, onMoveTask
                                 <TaskRow 
                                     key={task._id} 
                                     task={task} 
-                                    onMoveTask={onMoveTask} 
+                                    onMoveTask={onMoveTask}
+                                    userRole={userRole}
                                 />
                             ))}
                         </tbody>
