@@ -17,6 +17,10 @@ export const createTask = async (req, res) => {
             return res.status(404).json({ message: "Project not found or unauthorized" });
         }
 
+        if (req.user.role === 'owner' && status === 'done') {
+            return res.status(403).json({ message: "Owners are not allowed to complete tasks directly" });
+        }
+
         const taskData = {
             title,
             description,
@@ -44,7 +48,16 @@ export const createTask = async (req, res) => {
 // @access  Private
 export const getTasks = async (req, res) => {
     try {
-        const tasks = await Task.find({ workspaceId: req.user.workspaceId })        
+        // Filter tasks such that "done" tasks are only visible to the person who completed them
+        const query = {
+            workspaceId: req.user.workspaceId,
+            $or: [
+                { status: { $ne: 'done' } },
+                { status: 'done', completedBy: req.user._id }
+            ]
+        };
+
+        const tasks = await Task.find(query)        
             .populate("projectId", "name")
             .populate("completedBy", "name");
         res.json(tasks);
@@ -67,6 +80,15 @@ export const updateTask = async (req, res) => {
 
         if (task.workspaceId.toString() !== req.user.workspaceId.toString()) {
             return res.status(403).json({ message: "Not authorized to access this task" });
+        }
+
+        // Visibility Rule: Cannot update a completed task unless you are the one who finished it
+        if (task.status === 'done' && task.completedBy.toString() !== req.user._id.toString()) {
+            return res.status(403).json({ message: "Access denied. Only the person who completed this task can view or edit it." });
+        }
+
+        if (req.user.role === 'owner' && req.body.status === 'done') {
+            return res.status(403).json({ message: "Owners are not allowed to complete tasks directly" });
         }
 
         // Logic for setting completedBy
@@ -103,6 +125,11 @@ export const deleteTask = async (req, res) => {
 
         if (task.workspaceId.toString() !== req.user.workspaceId.toString()) {
             return res.status(403).json({ message: "Not authorized to access this task" });
+        }
+
+        // Visibility Rule: Cannot delete a completed task unless you are the one who finished it
+        if (task.status === 'done' && task.completedBy.toString() !== req.user._id.toString()) {
+            return res.status(403).json({ message: "Access denied. Only the person who completed this task can view or delete it." });
         }
 
         await Task.findByIdAndDelete(req.params.id);
