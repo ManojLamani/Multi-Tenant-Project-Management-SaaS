@@ -30,6 +30,13 @@ const Register = () => {
             if (orgMode === 'create') {
                 payload.organizationName = orgInput;
             } else {
+                // Validate Workspace ID format (24 hex characters)
+                const isValidId = /^[0-9a-fA-F]{24}$/.test(orgInput);
+                if (!isValidId) {
+                    setError('Workspace ID must be exactly 24 hexadecimal characters.');
+                    setLoading(false);
+                    return;
+                }
                 payload.orgId = orgInput;
             }
 
