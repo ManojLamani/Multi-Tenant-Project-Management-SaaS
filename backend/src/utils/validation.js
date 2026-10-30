@@ -32,7 +32,8 @@ export function projectInput(body, creating = false) {
 }
 
 export function taskInput(body, creating = false) {
-    fields(body, creating ? ["title", "description", "status", "projectId"] : ["title", "description", "status"]);
+    const editable = ["title", "description", "status", "priority", "assignedTo", "dueDate"];
+    fields(body, creating ? [...editable, "projectId"] : editable);
     const result = {};
     if (creating || "title" in body) result.title = text(body.title, "Title", 200, true);
     if ("description" in body) result.description = text(body.description, "Description", 5000);
@@ -41,6 +42,22 @@ export function taskInput(body, creating = false) {
         result.status = body.status;
     }
     if (creating) result.projectId = objectId(body.projectId, "project ID");
+    if ("priority" in body) {
+        if (!["low", "medium", "high"].includes(body.priority)) throw new InputError("Invalid priority");
+        result.priority = body.priority;
+    }
+    if ("assignedTo" in body) result.assignedTo = body.assignedTo === null || body.assignedTo === "" ? null : objectId(body.assignedTo, "assignee ID");
+    if ("dueDate" in body) {
+        if (body.dueDate === null || body.dueDate === "") result.dueDate = null;
+        else {
+            const value = body.dueDate;
+            if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
+                Number.isNaN(Date.parse(value)) || new Date(value).toISOString().slice(0, 10) !== value) {
+                throw new InputError("Due date must be a valid date in YYYY-MM-DD format");
+            }
+            result.dueDate = new Date(`${value}T00:00:00.000Z`);
+        }
+    }
     return result;
 }
 
