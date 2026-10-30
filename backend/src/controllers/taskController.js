@@ -1,6 +1,8 @@
 import Task from "../models/Task.js";
 import Project from "../models/Project.js";
 import User from "../models/User.js";
+import mongoose from "mongoose";
+import { recordActivity, touchProject } from "../utils/activity.js";
 import { InputError, objectId, taskInput, respondError } from "../utils/validation.js";
 
 async function validateAssignee(assignedTo, workspaceId) {
@@ -20,12 +22,17 @@ export const createTask = async (req, res) => {
         const project = await Project.findOne({ _id: projectId, workspaceId: req.user.workspaceId });
         if (!project) return res.status(404).json({ message: "Project not found or unauthorized" });
 
-        const task = await Task.create({
-            ...input,
-            status: status || "todo",
-            projectId,
-            workspaceId: req.user.workspaceId,
-            completedBy: status === "done" ? req.user._id : null
+        const task = await mongoose.connection.transaction(async session => {
+            await touchProject(projectId, req.user.workspaceId, session);
+            const [created] = await Task.create([{
+                ...input,
+                status: status || "todo",
+                projectId,
+                workspaceId: req.user.workspaceId,
+                completedBy: status === "done" ? req.user._id : null
+            }], { session });
+            await recordActivity(created, req.user._id, "created", session);
+            return created;
         });
 
         await task.populate([{ path: "assignedTo", select: "name" }, { path: "completedBy", select: "name" }]);
@@ -78,23 +85,20 @@ export const updateTask = async (req, res) => {
             return res.status(403).json({ message: "Members can only change task status" });
         }
         await validateAssignee(changes.assignedTo, req.user.workspaceId);
-        const task = await Task.findOne({ _id: req.params.id, workspaceId: req.user.workspaceId });
-        if (!task) return res.status(404).json({ message: "Task not found" });
-
-        // Update completedBy logic
-        if (changes.status === "done" && task.status !== "done") {
-            changes.completedBy = req.user._id;
-        } else if (changes.status && changes.status !== "done") {
-            changes.completedBy = null;
-        }
-
-        const updatedTask = await Task.findOneAndUpdate(
-            { _id: req.params.id, workspaceId: req.user.workspaceId }, { $set: changes }, { returnDocument: "after", runValidators: true })
-            .populate("projectId", "name")
-            .populate("assignedTo", "name")
-            .populate("completedBy", "name");
-
-        if (!updatedTask) return res.status(404).json({ message: "Task not found" });
+        const updatedTask = await mongoose.connection.transaction(async session => {
+            const task = await Task.findOne({ _id: req.params.id, workspaceId: req.user.workspaceId }).session(session);
+            if (!task) throw Object.assign(new Error("Task not found"), { status: 404 });
+            await touchProject(task.projectId, req.user.workspaceId, session);
+            const patch = { ...changes };
+            if (patch.status === "done" && task.status !== "done") patch.completedBy = req.user._id;
+            else if (patch.status && patch.status !== "done") patch.completedBy = null;
+            const updated = await Task.findOneAndUpdate(
+                { _id: task._id, workspaceId: req.user.workspaceId }, { $set: patch },
+                { returnDocument: "after", runValidators: true, session });
+            await recordActivity(updated, req.user._id, "updated", session, task, patch);
+            return updated;
+        });
+        await updatedTask.populate([{ path: "projectId", select: "name" }, { path: "assignedTo", select: "name" }, { path: "completedBy", select: "name" }]);
         res.json(updatedTask);
     } catch (error) {
         respondError(res, error);
@@ -106,8 +110,12 @@ export const updateTask = async (req, res) => {
 export const deleteTask = async (req, res) => {
     try {
         objectId(req.params.id, "task ID");
-        const result = await Task.deleteOne({ _id: req.params.id, workspaceId: req.user.workspaceId });
-        if (result.deletedCount === 0) return res.status(404).json({ message: "Task not found" });
+        await mongoose.connection.transaction(async session => {
+            const task = await Task.findOneAndDelete({ _id: req.params.id, workspaceId: req.user.workspaceId }, { session });
+            if (!task) throw Object.assign(new Error("Task not found"), { status: 404 });
+            await touchProject(task.projectId, req.user.workspaceId, session);
+            await recordActivity(task, req.user._id, "deleted", session);
+        });
         res.json({ message: "Task removed" });
     } catch (error) {
         respondError(res, error);
