@@ -46,7 +46,7 @@ export default function Dashboard() {
                 navigate('/');
             } else setLoadError('Could not load your workspace. Please try again.');
         }).finally(() => { if (active) setLoading(false); });
-        return () => { active = false; };
+        return () => { active = false; activeProject.current = null; };
     }, [navigate, retry]);
 
     function failure(error, fallback) {
@@ -65,7 +65,9 @@ export default function Dashboard() {
     }
 
     async function openProject(project) {
-        activeProject.current = project._id;
+        // Each visit has its own identity, including reopening the same project.
+        const visit = { projectId: project._id };
+        activeProject.current = visit;
         setSelectedProject(project);
         setView('tasks');
         setTasks([]);
@@ -74,14 +76,14 @@ export default function Dashboard() {
         setFeedback('');
         try {
             const response = await api.get('/tasks', { params: { projectId: project._id } });
-            if (activeProject.current === project._id) setTasks(response.data);
+            if (activeProject.current === visit) setTasks(response.data);
         } catch (error) {
-            if (activeProject.current === project._id) {
+            if (activeProject.current === visit) {
                 setTasksError('Could not load tasks for this project.');
                 if (error.response?.status === 401) failure(error);
             }
         } finally {
-            if (activeProject.current === project._id) setTasksLoading(false);
+            if (activeProject.current === visit) setTasksLoading(false);
         }
     }
 
@@ -114,32 +116,33 @@ export default function Dashboard() {
     }
 
     async function createTask(values) {
-        const projectId = selectedProject._id;
+        const visit = activeProject.current;
+        const projectId = visit.projectId;
         setFeedback('');
         try {
             const response = await api.post('/tasks', { ...values, projectId });
-            if (activeProject.current === projectId) {
+            if (activeProject.current === visit) {
                 setTasks(previous => [...previous, response.data]);
                 setActivityVersion(value => value + 1);
             }
             return true;
-        } catch (error) { return failure(error, 'Could not create the task.'); }
+        } catch (error) { return activeProject.current === visit ? failure(error, 'Could not create the task.') : false; }
     }
 
     async function mutateTask(id, values, deleting = false) {
         if (taskLocks.current.has(id)) return false;
-        const projectId = selectedProject._id;
+        const visit = activeProject.current;
         taskLocks.current.add(id);
         setPendingTasks([...taskLocks.current]);
         setFeedback('');
         try {
             const response = deleting ? await api.delete(`/tasks/${id}`) : await api.put(`/tasks/${id}`, values);
-            if (activeProject.current === projectId) {
+            if (activeProject.current === visit) {
                 setTasks(previous => deleting ? previous.filter(task => task._id !== id) : previous.map(task => task._id === id ? response.data : task));
                 setActivityVersion(value => value + 1);
             }
             return true;
-        } catch (error) { return failure(error, 'Could not save the task change.'); }
+        } catch (error) { return activeProject.current === visit ? failure(error, 'Could not save the task change.') : false; }
         finally {
             taskLocks.current.delete(id);
             setPendingTasks([...taskLocks.current]);
@@ -160,8 +163,8 @@ export default function Dashboard() {
             {view === 'projects' && <ProjectList projects={projects} canCreate={canManage} canDelete={user.role === 'owner'} onCreateProject={createProject} onUpdateProject={updateProject} onDeleteProject={deleteProject} onOpenProject={openProject} />}
             {view === 'tasks' && selectedProject && <>
                 {tasksLoading ? <><button className="btn-secondary" onClick={back}>Back to Projects</button><p role="status">Loading tasks…</p></> : tasksError ? <><button className="btn-secondary" onClick={back}>Back to Projects</button><p role="alert">{tasksError}</p><button className="btn-primary" onClick={() => openProject(selectedProject)}>Retry tasks</button></> :
-                    <TaskTable key={selectedProject._id} project={selectedProject} tasks={tasks} team={team} pendingTasks={pendingTasks} canCreate={canManage} onBack={back} onCreateTask={createTask} onUpdateTask={mutateTask} onMoveTask={(id, status) => mutateTask(id, { status })} onDeleteTask={id => window.confirm('Delete this task permanently?') && mutateTask(id, null, true)} />}
-                <ActivityFeed key={selectedProject._id} projectId={selectedProject._id} version={activityVersion} team={team} />
+                    <TaskTable key={`tasks-${selectedProject._id}`} project={selectedProject} tasks={tasks} team={team} pendingTasks={pendingTasks} canCreate={canManage} onBack={back} onCreateTask={createTask} onUpdateTask={mutateTask} onMoveTask={(id, status) => mutateTask(id, { status })} onDeleteTask={id => window.confirm('Delete this task permanently?') && mutateTask(id, null, true)} />}
+                <ActivityFeed key={`activity-${selectedProject._id}`} projectId={selectedProject._id} version={activityVersion} team={team} />
             </>}
             {view === 'team' && <TeamList onBack={back} currentUserRole={user.role} />}
         </main>
