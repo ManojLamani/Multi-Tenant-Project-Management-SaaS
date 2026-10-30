@@ -1,73 +1,63 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 
-// Memoized card prevents all projects from re-rendering when typing in one 
-const ProjectCard = React.memo(({ proj, canCreate, canDelete, onOpenProject, onDeleteProject, onUpdateProject }) => {
-    const [isEditing, setIsEditing] = useState(false);
-    const [editData, setEditData] = useState({ name: proj.name, description: proj.description || '' });
-
-    if (isEditing) {
-        return (
-            <div className="project-card" onClick={e => e.stopPropagation()}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    <input style={{ padding: '8px', borderRadius: '4px', border: '1px solid #dfe1e6' }} value={editData.name} onChange={e => setEditData({ ...editData, name: e.target.value })} />
-                    <textarea style={{ padding: '8px', borderRadius: '4px', border: '1px solid #dfe1e6', minHeight: '60px', fontFamily: 'inherit' }} value={editData.description} onChange={e => setEditData({ ...editData, description: e.target.value })} />
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                        <button onClick={() => { onUpdateProject(proj._id, editData); setIsEditing(false); }} className="btn-primary" style={{ padding: '6px 12px', fontSize: '13px', flex: 1 }}>Save</button>
-                        <button onClick={() => setIsEditing(false)} className="btn-secondary" style={{ padding: '6px 12px', fontSize: '13px', flex: 1 }}>Cancel</button>
-                    </div>
-                </div>
-            </div>
-        );
+function ProjectCard({ project, canCreate, canDelete, onOpenProject, onDeleteProject, onUpdateProject }) {
+    const [editing, setEditing] = useState(false);
+    const [values, setValues] = useState({ name: project.name, description: project.description || '' });
+    const [pending, setPending] = useState(false);
+    const [error, setError] = useState('');
+    async function save(event) {
+        event.preventDefault();
+        setPending(true);
+        setError('');
+        try {
+            if (await onUpdateProject(project._id, values) !== false) setEditing(false);
+            else setError('Could not save. Your changes are still here.');
+        } catch { setError('Could not save. Please try again.'); }
+        finally { setPending(false); }
     }
+    async function remove() {
+        setPending(true);
+        try { await onDeleteProject(project._id); }
+        finally { setPending(false); }
+    }
+    return <article className="project-card">
+        {editing ? <form className="create-form" onSubmit={save}>
+            {error && <p role="alert">{error}</p>}
+            <label>Project name<input value={values.name} onChange={event => setValues({ ...values, name: event.target.value })} maxLength={200} required /></label>
+            <label>Description<textarea value={values.description} onChange={event => setValues({ ...values, description: event.target.value })} maxLength={5000} /></label>
+            <div className="task-actions"><button className="btn-primary" disabled={pending}>Save Project</button><button type="button" className="btn-secondary" disabled={pending} onClick={() => setEditing(false)}>Cancel</button></div>
+        </form> : <>
+            <h3><button className="project-title" aria-label={`Open ${project.name}`} onClick={() => onOpenProject(project)}>{project.name}</button></h3>
+            <p>{project.description || 'No description provided.'}</p>
+            <div className="task-actions">
+                {canCreate && <button className="btn-secondary" disabled={pending} onClick={() => { setValues({ name: project.name, description: project.description || '' }); setError(''); setEditing(true); }}>Edit {project.name}</button>}
+                {canDelete && <button className="btn-secondary" disabled={pending} onClick={remove}>Delete {project.name}</button>}
+            </div>
+        </>}
+    </article>;
+}
 
-    return (
-        <div className="project-card" onClick={() => onOpenProject(proj)}>
-            <h3>{proj.name}</h3>
-            <p>{proj.description || 'No description provided.'}</p>
-            {(canCreate || canDelete) && (
-                <div style={{ marginTop: 'auto', paddingTop: '15px', display: 'flex', gap: '10px' }}>
-                    {canCreate && <button onClick={e => { e.stopPropagation(); setIsEditing(true); }} style={{ background: '#e6effc', color: '#0052cc', padding: '6px 12px', border: 'none', borderRadius: '4px', cursor: 'pointer', flex: 1, fontWeight: '600' }}>Edit</button>}
-                    {canDelete && <button onClick={e => { e.stopPropagation(); onDeleteProject(proj._id); }} style={{ background: '#ffebe6', color: '#bf2600', padding: '6px 12px', border: 'none', borderRadius: '4px', cursor: 'pointer', flex: 1, fontWeight: '600' }}>Delete</button>}
-                </div>
-            )}
-        </div>
-    );
-});
-
-const ProjectList = ({ projects, canCreate, canDelete, onCreateProject, onOpenProject, onDeleteProject, onUpdateProject }) => {
-    const [newProject, setNewProject] = useState({ name: '', description: '' });
-
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        onCreateProject(newProject);
-        setNewProject({ name: '', description: '' });
-    };
-
-    return (
-        <>
-            {canCreate && (
-                <section className="create-section">
-                    <h2>Create New Project</h2>
-                    <form onSubmit={handleSubmit} className="create-form">
-                        <input placeholder="Project Name" value={newProject.name} onChange={e => setNewProject({...newProject, name: e.target.value})} required />
-                        <textarea placeholder="Description" value={newProject.description} onChange={e => setNewProject({...newProject, description: e.target.value})} />
-                        <button type="submit" className="btn-primary">Create Project</button>
-                    </form>
-                </section>
-            )}
-
-            <section className="projects-section">
-                <h2>Your Projects</h2>
-                {!projects.length ? <p className="no-projects">No projects found.</p> : (
-                    <div className="projects-grid">
-                        {projects.map(proj => (
-                            <ProjectCard key={proj._id} proj={proj} {...{canCreate, canDelete, onOpenProject, onDeleteProject, onUpdateProject}} />
-                        ))}
-                    </div>
-                )}
-            </section>
-        </>
-    );
-};
-
-export default ProjectList;
+export default function ProjectList({ projects, canCreate, canDelete, onCreateProject, ...actions }) {
+    const [values, setValues] = useState({ name: '', description: '' });
+    const [pending, setPending] = useState(false);
+    const [error, setError] = useState('');
+    async function submit(event) {
+        event.preventDefault();
+        setPending(true);
+        setError('');
+        try {
+            if (await onCreateProject(values) !== false) setValues({ name: '', description: '' });
+            else setError('Could not create the project. Your draft is still here.');
+        } catch { setError('Could not create the project. Please try again.'); }
+        finally { setPending(false); }
+    }
+    return <>
+        {canCreate && <section className="create-section"><h2>Create New Project</h2><form className="create-form" onSubmit={submit}>
+            {error && <p role="alert">{error}</p>}
+            <label>Project name<input placeholder="Project Name" value={values.name} onChange={event => setValues({ ...values, name: event.target.value })} maxLength={200} required /></label>
+            <label>Description<textarea value={values.description} onChange={event => setValues({ ...values, description: event.target.value })} maxLength={5000} /></label>
+            <button className="btn-primary" disabled={pending}>{pending ? 'Creating…' : 'Create Project'}</button>
+        </form></section>}
+        <section className="projects-section"><h2>Your Projects</h2>{!projects.length ? <p>No projects found.</p> : <div className="projects-grid">{projects.map(project => <ProjectCard key={project._id} project={project} canCreate={canCreate} canDelete={canDelete} {...actions} />)}</div>}</section>
+    </>;
+}

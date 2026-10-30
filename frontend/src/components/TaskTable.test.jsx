@@ -42,4 +42,12 @@ describe('task permissions in the interface', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent('Your changes are still here');
         expect(screen.getByPlaceholderText('Task Title')).toHaveValue('Keep this draft');
     });
+    it('switches to the board and moves a task using accessible controls', async () => {
+        const onMoveTask = vi.fn();
+        view({ onMoveTask });
+        await userEvent.click(screen.getByRole('button', { name: 'Board view' }));
+        expect(screen.queryByRole('table')).not.toBeInTheDocument();
+        await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Move Review release' }), 'in-progress');
+        expect(onMoveTask).toHaveBeenCalledWith('task-1', 'in-progress');
+    });
 });
