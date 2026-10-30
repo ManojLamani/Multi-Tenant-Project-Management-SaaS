@@ -12,7 +12,8 @@ const UserSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: true
+    required: true,
+    select: false
   },
   role: {
     type: String,
@@ -24,6 +25,14 @@ const UserSchema = new mongoose.Schema({
     ref: "Organization",
     required: true
   }
-}, { timestamps: true });
+}, {
+  timestamps: true,
+  toJSON: {
+    transform(_doc, ret) {
+      delete ret.password;
+      return ret;
+    }
+  }
+});
 
 export default mongoose.model("User", UserSchema);

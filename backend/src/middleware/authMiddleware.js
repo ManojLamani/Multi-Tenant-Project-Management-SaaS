@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
+import { getJwtSecret } from "../config/auth.js";
 
 // Middleware to protect routes (make sure user is logged in)
 export const protect = async (req, res, next) => {
@@ -15,8 +16,7 @@ export const protect = async (req, res, next) => {
         const token = authHeader.split(" ")[1];
 
         // 2. Verify the token is valid
-        const secret = process.env.JWT_SECRET || "fallback_secret";
-        const decoded = jwt.verify(token, secret);
+        const decoded = jwt.verify(token, getJwtSecret(), { algorithms: ["HS256"] });
 
         // 3. Find the user in the database (excluding the password)
         const user = await User.findById(decoded.userId).select("-password");
