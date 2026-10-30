@@ -4,6 +4,7 @@ import api from '../services/api';
 import ProjectList from '../components/ProjectList';
 import TaskTable from '../components/TaskTable';
 import TeamList from '../components/TeamList';
+import ActivityFeed from '../components/ActivityFeed';
 import './Dashboard.css';
 
 const Dashboard = () => {
@@ -12,6 +13,7 @@ const Dashboard = () => {
     const [selectedProject, setSelectedProject] = useState(null);
     const [tasks, setTasks] = useState([]);
     const [team, setTeam] = useState([]);
+    const [activityVersion, setActivityVersion] = useState(0);
     const [loading, setLoading] = useState(true);
 
     // View state strings: 'projects' | 'tasks' | 'team'
@@ -97,6 +99,7 @@ const Dashboard = () => {
         try {
             const res = await api.post('/tasks', { ...newTaskData, projectId: selectedProject._id });
             setTasks(previous => [...previous, res.data]);
+            setActivityVersion(value => value + 1);
             return true;
         } catch (error) {
             alert("Failed to create task");
@@ -108,6 +111,7 @@ const Dashboard = () => {
         try {
             const res = await api.put(`/tasks/${taskId}`, { status: newStatus });
             setTasks(tasks.map(t => t._id === taskId ? { ...t, status: res.data.status, completedBy: res.data.completedBy } : t));
+            setActivityVersion(value => value + 1);
         } catch (error) {
             alert("Failed to update task status");
         }
@@ -117,6 +121,7 @@ const Dashboard = () => {
         try {
             const res = await api.put(`/tasks/${taskId}`, changes);
             setTasks(previous => previous.map(task => task._id === taskId ? res.data : task));
+            setActivityVersion(value => value + 1);
             return true;
         } catch (error) {
             alert(error.response?.data?.message || 'Failed to update task');
@@ -129,6 +134,7 @@ const Dashboard = () => {
         try {
             await api.delete(`/tasks/${taskId}`);
             setTasks(previous => previous.filter(task => task._id !== taskId));
+            setActivityVersion(value => value + 1);
         } catch (error) {
             alert('Failed to delete task');
         }
@@ -176,7 +182,7 @@ const Dashboard = () => {
                 )}
 
                 {viewMode === 'tasks' && selectedProject && (
-                    <TaskTable
+                    <><TaskTable
                         project={selectedProject}
                         tasks={tasks}
                         team={team}
@@ -187,7 +193,7 @@ const Dashboard = () => {
                         onMoveTask={handleMoveTask}
                         onUpdateTask={handleUpdateTask}
                         onDeleteTask={handleDeleteTask}
-                    />
+                    /><ActivityFeed key={selectedProject._id} projectId={selectedProject._id} version={activityVersion} /></>
                 )}
 
                 {viewMode === 'team' && (

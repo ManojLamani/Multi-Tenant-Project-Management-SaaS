@@ -1,6 +1,7 @@
 import Project from "../models/Project.js";
 import Task from "../models/Task.js";
 import mongoose from "mongoose";
+import Activity from "../models/Activity.js";
 import { objectId, projectInput, respondError } from "../utils/validation.js";
 
 // @route   POST /api/projects
@@ -70,9 +71,23 @@ export const deleteProject = async (req, res) => {
 
         await mongoose.connection.transaction(async session => {
             await Task.deleteMany({ projectId: project._id, workspaceId: req.user.workspaceId }, { session });
+            await Activity.deleteMany({ projectId: project._id, workspaceId: req.user.workspaceId }, { session });
             await Project.deleteOne({ _id: project._id, workspaceId: req.user.workspaceId }, { session });
         });
         res.json({ message: "Project removed" });
+    } catch (error) {
+        respondError(res, error);
+    }
+};
+
+export const getProjectActivity = async (req, res) => {
+    try {
+        objectId(req.params.id, "project ID");
+        const project = await Project.exists({ _id: req.params.id, workspaceId: req.user.workspaceId });
+        if (!project) return res.status(404).json({ message: "Project not found" });
+        const events = await Activity.find({ projectId: req.params.id, workspaceId: req.user.workspaceId })
+            .sort({ createdAt: -1, _id: -1 }).limit(50).populate("actor", "name");
+        res.json(events);
     } catch (error) {
         respondError(res, error);
     }
