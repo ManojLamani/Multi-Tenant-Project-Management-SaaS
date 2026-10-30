@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, expect, it, vi } from 'vitest';
@@ -36,7 +36,7 @@ it('ignores an old project response after the user opens another project', async
     await userEvent.click(screen.getByRole('button', { name: 'Back to Projects' }));
     await userEvent.click(screen.getByRole('button', { name: 'Open Second' }));
     expect(await screen.findByText('Second task')).toBeInTheDocument();
-    finishFirst({ data: [{ _id: 'old-task', title: 'First task', status: 'todo' }] });
+    await act(async () => finishFirst({ data: [{ _id: 'old-task', title: 'First task', status: 'todo' }] }));
     expect(screen.queryByText('First task')).not.toBeInTheDocument();
     expect(within(screen.getByRole('table')).getByText('Second task')).toBeInTheDocument();
 });

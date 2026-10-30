@@ -1,154 +1,178 @@
-# Multi-Tenant Project Management SaaS (TaskForge)
----
+# TaskForge — Multi-Tenant Project Management
 
-## 🚀 Getting Started (How to Run Locally)
+TaskForge is a React and Express application for teams to manage projects in isolated organization workspaces. MongoDB stores users, projects, tasks, and task activity history.
 
-This project has separate `frontend` and `backend` directories. Follow these instructions to run the application locally.
+## Features
 
-### 1. Backend Setup
-```bash
+- Workspace registration and joining with a workspace ID.
+- JWT authentication with password hashes excluded from API responses.
+- Owner, manager, and member permissions enforced by the API.
+- Project creation, editing, and transactional deletion of associated tasks/history.
+- Tasks with assignees, priorities, due dates, status, and completion attribution.
+- Task editing/deletion, search, and status/priority/assignee filters.
+- Table and Kanban views with project completion and overdue-task metrics.
+- Recent task activity with actors, timestamps, and before/after changes.
+- Automated backend integration tests and frontend interaction, lint, and build checks.
+
+## Requirements
+
+- Node.js 24 and npm (the repository includes `.nvmrc`).
+- A MongoDB replica set, such as MongoDB Atlas, or Docker with Compose for the local database below. Transactions are required for task mutations and project deletion; a standalone MongoDB server is insufficient.
+
+## Run locally
+
+### 1. Start MongoDB
+
+From the repository root:
+
+```sh
+docker compose up -d --wait
+```
+
+Compose initializes a single-node replica set, binds the database to `127.0.0.1:27017`, and persists data in a named volume. This database configuration is for local development. An existing Atlas replica set can be used instead by setting its connection string in `MONGO_URI`.
+
+### 2. Configure and start the backend
+
+Copy `backend/.env.example` to `backend/.env`. PowerShell:
+
+```powershell
+Copy-Item backend/.env.example backend/.env
+```
+
+macOS/Linux:
+
+```sh
+cp backend/.env.example backend/.env
+```
+
+Generate a JWT secret and paste it into the `JWT_SECRET` value in `backend/.env`:
+
+```sh
+node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
+```
+
+Then run:
+
+```sh
 cd backend
-npm install
+npm ci
 npm run dev
 ```
 
-### 2. Frontend Setup
-```bash
+The backend starts at `http://localhost:5000` after connecting to MongoDB. Startup fails if required configuration is missing or the database cannot be reached. Changing the JWT secret invalidates existing sessions.
+
+### 3. Start the frontend
+
+In a second terminal:
+
+```sh
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
----
+Open `http://localhost:5173`. The frontend defaults to `http://localhost:5000/api`. To change it, copy `frontend/.env.example` to `frontend/.env` and set `VITE_API_URL`, including `/api`. Restart Vite after changing frontend environment variables. If Vite selects another port, add that origin to backend `CLIENT_ORIGINS` or free port 5173.
 
-## 📖 1. Problem Statement
+### 4. Try the workflow
 
-### 1.1 Overview
-Organizations require a centralized platform to manage projects, assign tasks, and track team progress efficiently. However, many existing tools are expensive, overly complex, or not customizable for small and medium teams. 
+1. Register and choose **Create Workspace** to become its owner.
+2. Create a project and add tasks with a priority, assignee, and due date.
+3. Share the workspace ID with a teammate, who registers using **Join Existing**. The workspace ID currently acts as the join credential; share it only with intended team members.
+4. Use **Manage Team** to promote a member to manager.
+5. Switch between table and board views, filter tasks, change status, and inspect recent activity.
 
-This project builds a scalable **Multi-Tenant Project Management SaaS** platform where multiple organizations can manage their projects independently using a single backend system with strict data isolation and role-based access control.
+### Stop the local database
 
-### 1.2 Why It Matters
-Managing projects without structured systems leads to poor task tracking, lack of accountability, missed deadlines, and data confusion across teams. 
-A multi-tenant SaaS platform ensures secure data isolation per organization, scalable architecture, cost-effective shared infrastructure, and controlled access via roles.
+```sh
+docker compose down
+```
 
-### 1.3 Key Inputs and Expected Outputs
+The named volume preserves data between starts.
 
-| Inputs | Process | Expected Outputs |
-| :--- | :--- | :--- |
-| Organization registration details | Create tenant entry in MongoDB | Isolated organization workspace |
-| User signup/login credentials | JWT authentication & bcrypt validation | Secure login token |
-| Project details (Name, Description) | Store with tenantId mapping | Project dashboard listing |
-| Task details (Title, Status, Priority) | Linked to project & tenant | Updated task board |
-| Role assignment (Owner/Manager/Member) | Role middleware validation | Controlled access to resources |
+## Configuration
 
----
+| Variable | Location | Purpose |
+| --- | --- | --- |
+| `MONGO_URI` | Backend | Required MongoDB replica-set connection string. |
+| `JWT_SECRET` | Backend | Required randomly generated signing secret of at least 32 characters. |
+| `PORT` | Backend | API port; defaults to `5000`. |
+| `CLIENT_ORIGINS` | Backend | Comma-separated HTTP(S) frontend origins. Defaults to localhost/127.0.0.1 port 5173 in development; required in production. |
+| `NODE_ENV` | Backend | Set to `production` for deployed environments. |
+| `VITE_API_URL` | Frontend | API base URL including `/api`; baked into the frontend at build time. |
 
-## 🎯 2. Functional Scope
+Never put database credentials or JWT signing secrets in frontend variables. Real `.env` files are ignored by Git; `.env.example` templates contain no credentials. Production deployments should use HTTPS and their actual frontend origin.
 
-### 2.1 Core Features (Must-Haves)
-- **Organization Management** (Multi-Tenant Support)
-- **User Authentication** (Login/Signup)
-- **Role-Based Access Control** (Owner, Manager, Member)
-- **Project Management** (CRUD operations)
-- **Task Management** (CRUD with status tracking)
-- **Tenant-Based Data Isolation**
-- **Dashboard View** for project tracking
+## Permissions
 
-### 2.2 Stretch Goals (If Time Permits)
-- Activity Logs (Track task changes)
-- Project progress analytics
-- Soft delete implementation
-- Subscription logic (Free / Pro plans)
-- API documentation using Swagger
-- Search & filtering system
+| Action | Owner | Manager | Member |
+| --- | --- | --- | --- |
+| View workspace projects, tasks, team, activity | Yes | Yes | Yes |
+| Create/edit projects | Yes | Yes | No |
+| Delete projects and associated tasks/history | Yes | No | No |
+| Create/edit task content, assignment, priority, due date | Yes | Yes | No |
+| Change task status | Yes | Yes | Yes |
+| Delete tasks | Yes | Yes | No |
+| Change member/manager roles | Yes | No | No |
 
-### 2.3 Libraries / Tools
-- **Backend:** Node.js & Express.js
-- **Database:** MongoDB & Mongoose
-- **Frontend:** React.js, Vite
-- **Security:** JWT (jsonwebtoken) & bcrypt
-- **Tools:** Postman (API testing), Git & GitHub (Version control)
+Owners cannot be demoted through role management. Workspace IDs, project membership, creator IDs, and completion attribution cannot be changed through update payloads. Task assignees must belong to the current workspace.
 
----
+## API overview
 
-## ⚙️ 3. System & Design Thinking
+Protected routes require `Authorization: Bearer <token>`. IDs are MongoDB ObjectIds. Due dates use `YYYY-MM-DD`; send `null` to clear a due date or assignee.
 
-### 3.1 App Flow / Pipeline
-1. **Organization Registration:** Owner creates an organization and a `tenantId` is generated.
-2. **User Authentication:** Users sign up/login and receive a JWT containing `userId`, `tenantId`, and `role`.
-3. **Middleware Processing:** Every API request passes through authentication and tenant isolation middleware.
-4. **Project Creation:** Projects are created with a `tenantId` reference.
-5. **Task Assignment:** Tasks are linked to projects and filtered by `tenantId`.
-6. **Role Validation:** Middleware ensures only authorized users can modify resources (Owner / Manager / Member).
-7. **Dashboard Rendering:** React frontend fetches tenant-specific data via secure APIs.
+| Method | Route | Description |
+| --- | --- | --- |
+| POST | `/api/auth/register` | Register with `name`, `email`, `password`, and either `organizationName` or `orgId`. |
+| POST | `/api/auth/login` | Sign in with email/password; receive a token and sanitized user. |
+| GET | `/api/auth/me` | Current user. |
+| GET / POST | `/api/projects` | List/create workspace projects. |
+| PUT / DELETE | `/api/projects/:id` | Edit/delete a workspace project. |
+| GET | `/api/projects/:id/activity` | Latest 50 task events for an accessible project. |
+| GET / POST | `/api/tasks` | List/create tasks. |
+| PUT / DELETE | `/api/tasks/:id` | Edit/delete an accessible task. |
+| GET | `/api/users` | Workspace team. |
+| PUT | `/api/users/:id/role` | Set `role` to `manager` or `member`. |
+| GET | `/api/ping` | Process liveness. |
+| GET | `/api/ready` | Database connection readiness (200 or 503). |
 
-### 3.2 Testing Strategy
-- Test JWT authentication and token validation.
-- Verify tenant isolation between organizations.
-- Test CRUD operations for projects and tasks.
-- Validate role-based restrictions.
-- Test error handling and response time.
+Task listing accepts combined `projectId`, `status`, `priority`, `assignedTo`, and `q` query parameters. Search treats text literally. The interface filters the loaded project's tasks locally. Existing tasks without planning metadata appear as medium priority, unassigned, and without a due date. Activity history starts with changes made after the feature is installed.
 
----
+## Validation
 
-## 📅 4. Timeline & Milestones (8 Weeks)
+Backend:
 
-| Week | Deliverables |
-| :--- | :--- |
-| **Week 1** | Learn MERN fundamentals, JWT authentication, and project architecture planning. |
-| **Week 2** | Design multi-tenant database schema (Organizations, Users, Projects, Tasks). |
-| **Week 3** | Implement authentication APIs (Signup/Login) and tenant middleware. |
-| **Week 4** | Develop Organization & User management APIs with role-based access control. |
-| **Week 5** | Implement Project CRUD APIs with tenant isolation. |
-| **Week 6** | Implement Task CRUD APIs with role validation. |
-| **Week 7** | Integrate React frontend with backend APIs and build dashboard UI. |
-| **Week 8** | Testing, debugging, performance optimization, and final deployment demo. |
+```sh
+cd backend
+npm ci
+npm test
+```
 
----
+Tests launch a disposable single-node MongoDB replica set; they do not use `MONGO_URI` or modify your application database. The first run may download a MongoDB binary and requires network access. Coverage includes authentication, tenant isolation, role restrictions, planning validation, transactional cleanup, activity rollback, configuration, and CORS.
 
-## ⚠️ 5. Risks & Dependencies
+Frontend:
 
-### 5.1 Hardest Part Technically
-- Ensuring strict tenant-based data isolation.
-- Implementing secure role-based access control.
-- Preventing unauthorized cross-organization access.
-- Designing a scalable MongoDB indexing strategy.
+```sh
+cd frontend
+npm ci
+npm run lint
+npm test
+npm run build
+```
 
-### 5.2 Mentor Support Needed
-- Guidance on multi-tenant database structure.
-- Best practices for JWT security.
-- MongoDB indexing optimization.
-- Scaling SaaS architecture advice.
+GitHub Actions runs these checks for pushes and pull requests. For production, serve `frontend/dist` with SPA fallback routing to `index.html`, set the production API URL before building, and run `npm start` in `backend` with the configured environment.
 
----
+## Project layout
 
-## 🏆 6. Evaluation Readiness
-
-### 6.1 How Will You Prove It Works?
-- Postman API collection screenshots.
-- Demonstration of isolated organizations.
-- Role-based access testing.
-- React dashboard demo.
-- GitHub repository with documentation.
-
-### 6.2 Success Metrics
-- 100% tenant data isolation verified.
-- Secure JWT authentication.
-- All CRUD operations functioning.
-- Dashboard loads under 500ms.
-- Zero cross-tenant data leakage.
-
----
-
-## 📋 7. Responsibilities
-
-| Task | Student |
-| :--- | :--- |
-| **Database Setup** | Configure MongoDB schema for Organizations, Users, Projects, Tasks |
-| **Auth & Security** | Implement JWT authentication & bcrypt hashing |
-| **Tenant Middleware** | Develop tenant isolation middleware |
-| **Role Management** | Implement RBAC logic |
-| **API Development** | Build Project & Task CRUD APIs |
-| **Frontend Integration** | Connect React dashboard with backend APIs |
-| **Testing & Deployment** | Perform system testing and deploy application |
+```text
+backend/src/config       Environment, database, and token configuration
+backend/src/controllers Request handlers
+backend/src/middleware  Authentication and role checks
+backend/src/models      Workspace, user, project, task, and activity models
+backend/src/routes      API routes
+backend/src/utils       Input validation and transactional activity helpers
+backend/test            Database-backed integration tests
+frontend/src/components Project/task views, forms, board, progress, and history
+frontend/src/pages      Authentication and dashboard pages
+.github/workflows       Automated quality checks
+compose.yaml            Local MongoDB replica set
+```

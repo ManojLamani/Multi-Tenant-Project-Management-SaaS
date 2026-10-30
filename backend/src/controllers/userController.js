@@ -1,11 +1,12 @@
 import User from "../models/User.js";
-import { objectId, respondError } from "../utils/validation.js";
+import { fields, objectId, respondError } from "../utils/validation.js";
 
 // @route   PUT /api/users/:id/role
 // @desc    Update user role
 // @access  Private/Owner
 export const updateUserRole = async (req, res) => {
     try {
+        fields(req.body, ["role"]);
         const { role } = req.body;
 
         if (!["manager", "member"].includes(role)) {

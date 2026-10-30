@@ -9,6 +9,9 @@ import { getJwtSecret } from "../config/auth.js";
 // @desc    Register a user or create an organization
 export const registerUser = async (req, res) => {
     try {
+        if (!req.body || typeof req.body !== "object" || Array.isArray(req.body)) {
+            return res.status(400).json({ message: "Expected a JSON object" });
+        }
         const { name, password, organizationName, orgId } = req.body;
         const email = typeof req.body.email === "string" ? req.body.email.trim().toLowerCase() : "";
 
@@ -60,6 +63,9 @@ export const registerUser = async (req, res) => {
 // @desc    Authenticate a user
 export const loginUser = async (req, res) => {
     try {
+        if (!req.body || typeof req.body !== "object" || Array.isArray(req.body)) {
+            return res.status(400).json({ message: "Expected a JSON object" });
+        }
         const { password } = req.body;
         const email = typeof req.body.email === "string" ? req.body.email.trim().toLowerCase() : "";
         if (!email || typeof password !== "string" || !password) return res.status(400).json({ message: "Missing credentials" });
