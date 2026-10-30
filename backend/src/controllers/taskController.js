@@ -1,12 +1,12 @@
 import Task from "../models/Task.js";
 import Project from "../models/Project.js";
+import { objectId, taskInput, respondError } from "../utils/validation.js";
 
 // @route   POST /api/tasks
 // @desc    Create a task
 export const createTask = async (req, res) => {
     try {
-        const { title, description, status, projectId } = req.body;
-        if (!title || !projectId) return res.status(400).json({ message: "Title and ProjectId are required" });
+        const { title, description, status, projectId } = taskInput(req.body, true);
 
         const project = await Project.findOne({ _id: projectId, workspaceId: req.user.workspaceId });
         if (!project) return res.status(404).json({ message: "Project not found or unauthorized" });
@@ -22,7 +22,7 @@ export const createTask = async (req, res) => {
 
         res.status(201).json(task);
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        respondError(res, error);
     }
 };
 
@@ -30,12 +30,18 @@ export const createTask = async (req, res) => {
 // @desc    Get all tasks for the workspace
 export const getTasks = async (req, res) => {
     try {
-        const tasks = await Task.find({ workspaceId: req.user.workspaceId })
+        const filter = { workspaceId: req.user.workspaceId };
+        if (req.query.projectId !== undefined) {
+            filter.projectId = objectId(req.query.projectId, "project ID");
+            const project = await Project.exists({ _id: filter.projectId, workspaceId: req.user.workspaceId });
+            if (!project) return res.status(404).json({ message: "Project not found" });
+        }
+        const tasks = await Task.find(filter)
             .populate("projectId", "name")
             .populate("completedBy", "name");
         res.json(tasks);
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        respondError(res, error);
     }
 };
 
@@ -43,23 +49,27 @@ export const getTasks = async (req, res) => {
 // @desc    Update a task
 export const updateTask = async (req, res) => {
     try {
+        objectId(req.params.id, "task ID");
+        const changes = taskInput(req.body);
         const task = await Task.findOne({ _id: req.params.id, workspaceId: req.user.workspaceId });
         if (!task) return res.status(404).json({ message: "Task not found" });
 
         // Update completedBy logic
-        if (req.body.status === "done" && task.status !== "done") {
-            req.body.completedBy = req.user._id;
-        } else if (req.body.status && req.body.status !== "done") {
-            req.body.completedBy = null;
+        if (changes.status === "done" && task.status !== "done") {
+            changes.completedBy = req.user._id;
+        } else if (changes.status && changes.status !== "done") {
+            changes.completedBy = null;
         }
 
-        const updatedTask = await Task.findByIdAndUpdate(req.params.id, req.body, { new: true })
+        const updatedTask = await Task.findOneAndUpdate(
+            { _id: req.params.id, workspaceId: req.user.workspaceId }, { $set: changes }, { new: true, runValidators: true })
             .populate("projectId", "name")
             .populate("completedBy", "name");
 
+        if (!updatedTask) return res.status(404).json({ message: "Task not found" });
         res.json(updatedTask);
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        respondError(res, error);
     }
 };
 
@@ -67,11 +77,12 @@ export const updateTask = async (req, res) => {
 // @desc    Delete a task
 export const deleteTask = async (req, res) => {
     try {
+        objectId(req.params.id, "task ID");
         const result = await Task.deleteOne({ _id: req.params.id, workspaceId: req.user.workspaceId });
         if (result.deletedCount === 0) return res.status(404).json({ message: "Task not found" });
         res.json({ message: "Task removed" });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        respondError(res, error);
     }
 };
 

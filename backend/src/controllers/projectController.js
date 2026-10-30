@@ -1,15 +1,12 @@
 import Project from "../models/Project.js";
+import { objectId, projectInput, respondError } from "../utils/validation.js";
 
 // @route   POST /api/projects
 // @desc    Create a project
 // @access  Private (Owner, Manager)
 export const createProject = async (req, res) => {
     try {
-        const { name, description } = req.body;
-
-        if (!name) {
-            return res.status(400).json({ message: "Please provide a project name" });
-        }
+        const { name, description } = projectInput(req.body, true);
 
         const project = await Project.create({
             name,
@@ -20,8 +17,7 @@ export const createProject = async (req, res) => {
 
         res.status(201).json(project);
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: "Server error" });
+        respondError(res, error);
     }
 };
 
@@ -44,26 +40,17 @@ export const getProjects = async (req, res) => {
 // @access  Private
 export const updateProject = async (req, res) => {
     try {
-        const project = await Project.findById(req.params.id);
-
-        if (!project) {
-            return res.status(404).json({ message: "Project not found" });
-        }
-
-        if (project.workspaceId.toString() !== req.user.workspaceId.toString()) {
-            return res.status(403).json({ message: "Not authorized to access this project" });
-        }
-
-        const updatedProject = await Project.findByIdAndUpdate(
-            req.params.id,
-            req.body,
-            { new: true }
+        objectId(req.params.id, "project ID");
+        const changes = projectInput(req.body);
+        const updatedProject = await Project.findOneAndUpdate(
+            { _id: req.params.id, workspaceId: req.user.workspaceId },
+            { $set: changes },
+            { new: true, runValidators: true }
         );
-
+        if (!updatedProject) return res.status(404).json({ message: "Project not found" });
         res.json(updatedProject);
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: "Server error" });
+        respondError(res, error);
     }
 };
 
@@ -72,20 +59,16 @@ export const updateProject = async (req, res) => {
 // @access  Private (Owner only)
 export const deleteProject = async (req, res) => {
     try {
-        const project = await Project.findById(req.params.id);
+        objectId(req.params.id, "project ID");
+        const project = await Project.findOne({ _id: req.params.id, workspaceId: req.user.workspaceId });
 
         if (!project) {
             return res.status(404).json({ message: "Project not found" });
         }
 
-        if (project.workspaceId.toString() !== req.user.workspaceId.toString()) {
-            return res.status(403).json({ message: "Not authorized to access this project" });
-        }
-
-        await Project.findByIdAndDelete(req.params.id);
+        await Project.deleteOne({ _id: req.params.id, workspaceId: req.user.workspaceId });
         res.json({ message: "Project removed" });
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: "Server error" });
+        respondError(res, error);
     }
 };
