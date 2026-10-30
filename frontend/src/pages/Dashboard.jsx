@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import ProjectList from '../components/ProjectList';
@@ -7,204 +7,163 @@ import TeamList from '../components/TeamList';
 import ActivityFeed from '../components/ActivityFeed';
 import './Dashboard.css';
 
-const Dashboard = () => {
+export default function Dashboard() {
+    const navigate = useNavigate();
     const [user, setUser] = useState(null);
     const [projects, setProjects] = useState([]);
+    const [team, setTeam] = useState([]);
     const [selectedProject, setSelectedProject] = useState(null);
     const [tasks, setTasks] = useState([]);
-    const [team, setTeam] = useState([]);
-    const [activityVersion, setActivityVersion] = useState(0);
+    const [view, setView] = useState('projects');
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState('');
+    const [retry, setRetry] = useState(0);
+    const [tasksLoading, setTasksLoading] = useState(false);
+    const [tasksError, setTasksError] = useState('');
+    const [feedback, setFeedback] = useState('');
+    const [activityVersion, setActivityVersion] = useState(0);
+    const [pendingTasks, setPendingTasks] = useState([]);
+    const activeProject = useRef(null);
+    const taskLocks = useRef(new Set());
 
-    // View state strings: 'projects' | 'tasks' | 'team'
-    const [viewMode, setViewMode] = useState('projects');
-
-    const navigate = useNavigate();
-
-    // 1. Load Initial Data
     useEffect(() => {
-        const token = localStorage.getItem('token');
-        if (!token) return navigate('/');
-
-        const fetchData = async () => {
-            try {
-                const [userRes, projectsRes, teamRes] = await Promise.all([
-                    api.get('/auth/me'),
-                    api.get('/projects'),
-                    api.get('/users')
-                ]);
-                setUser(userRes.data.user);
-                setProjects(projectsRes.data);
-                setTeam(teamRes.data);
-            } catch (error) {
-                if (error.response?.status === 401) {
-                    localStorage.removeItem('token');
-                    navigate('/');
-                }
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchData();
-    }, [navigate]);
-
-    const handleLogout = () => {
-        localStorage.removeItem('token');
-        navigate('/');
-    };
-
-    // 2. Project Actions
-    const handleCreateProject = async (newProjectData) => {
-        try {
-            const res = await api.post('/projects', newProjectData);
-            setProjects([...projects, res.data]);
-        } catch (error) {
-            alert("Failed to create project");
+        if (!localStorage.getItem('token')) {
+            navigate('/');
+            return;
         }
-    };
+        let active = true;
+        setLoading(true);
+        setLoadError('');
+        Promise.all([api.get('/auth/me'), api.get('/projects'), api.get('/users')]).then(([profile, projectList, members]) => {
+            if (!active) return;
+            setUser(profile.data.user);
+            setProjects(projectList.data);
+            setTeam(members.data);
+        }).catch(error => {
+            if (!active) return;
+            if (error.response?.status === 401) {
+                localStorage.removeItem('token');
+                navigate('/');
+            } else setLoadError('Could not load your workspace. Please try again.');
+        }).finally(() => { if (active) setLoading(false); });
+        return () => { active = false; };
+    }, [navigate, retry]);
 
-    const handleDeleteProject = async (projectId) => {
-        if (!window.confirm("Are you sure you want to permanently delete this project?")) return;
-        try {
-            await api.delete(`/projects/${projectId}`);
-            setProjects(projects.filter(p => p._id !== projectId));
-        } catch (error) {
-            alert("Failed to delete project. Only owners can do this.");
-        }
-    };
+    function failure(error, fallback) {
+        if (error.response?.status === 401) {
+            localStorage.removeItem('token');
+            navigate('/');
+        } else setFeedback(error.response?.data?.message || fallback);
+        return false;
+    }
 
-    const handleUpdateProject = async (projectId, updatedData) => {
-        try {
-            const res = await api.put(`/projects/${projectId}`, updatedData);
-            setProjects(projects.map(p => p._id === projectId ? res.data : p));
-        } catch (error) {
-            alert("Failed to update project. Only managers or owners can do this.");
-        }
-    };
+    function back() {
+        activeProject.current = null;
+        setSelectedProject(null);
+        setView('projects');
+        setFeedback('');
+    }
 
-    const openProject = async (project) => {
+    async function openProject(project) {
+        activeProject.current = project._id;
         setSelectedProject(project);
-        setViewMode('tasks');
+        setView('tasks');
+        setTasks([]);
+        setTasksLoading(true);
+        setTasksError('');
+        setFeedback('');
         try {
-            const res = await api.get('/tasks', { params: { projectId: project._id } });
-            setTasks(res.data);
+            const response = await api.get('/tasks', { params: { projectId: project._id } });
+            if (activeProject.current === project._id) setTasks(response.data);
         } catch (error) {
-            console.error(error);
+            if (activeProject.current === project._id) {
+                setTasksError('Could not load tasks for this project.');
+                if (error.response?.status === 401) failure(error);
+            }
+        } finally {
+            if (activeProject.current === project._id) setTasksLoading(false);
         }
-    };
+    }
 
-    // 3. Task Actions
-    const handleCreateTask = async (newTaskData) => {
+    async function createProject(values) {
+        setFeedback('');
         try {
-            const res = await api.post('/tasks', { ...newTaskData, projectId: selectedProject._id });
-            setTasks(previous => [...previous, res.data]);
-            setActivityVersion(value => value + 1);
+            const response = await api.post('/projects', values);
+            setProjects(previous => [...previous, response.data]);
             return true;
-        } catch (error) {
-            alert("Failed to create task");
-            return false;
-        }
-    };
+        } catch (error) { return failure(error, 'Could not create the project.'); }
+    }
 
-    const handleMoveTask = async (taskId, newStatus) => {
+    async function updateProject(id, values) {
+        setFeedback('');
         try {
-            const res = await api.put(`/tasks/${taskId}`, { status: newStatus });
-            setTasks(tasks.map(t => t._id === taskId ? { ...t, status: res.data.status, completedBy: res.data.completedBy } : t));
-            setActivityVersion(value => value + 1);
-        } catch (error) {
-            alert("Failed to update task status");
-        }
-    };
-
-    const handleUpdateTask = async (taskId, changes) => {
-        try {
-            const res = await api.put(`/tasks/${taskId}`, changes);
-            setTasks(previous => previous.map(task => task._id === taskId ? res.data : task));
-            setActivityVersion(value => value + 1);
+            const response = await api.put(`/projects/${id}`, values);
+            setProjects(previous => previous.map(project => project._id === id ? response.data : project));
             return true;
-        } catch (error) {
-            alert(error.response?.data?.message || 'Failed to update task');
-            return false;
-        }
-    };
+        } catch (error) { return failure(error, 'Could not update the project.'); }
+    }
 
-    const handleDeleteTask = async taskId => {
-        if (!window.confirm('Delete this task permanently?')) return;
+    async function deleteProject(id) {
+        if (!window.confirm('Delete this project and all its tasks permanently?')) return false;
+        setFeedback('');
         try {
-            await api.delete(`/tasks/${taskId}`);
-            setTasks(previous => previous.filter(task => task._id !== taskId));
-            setActivityVersion(value => value + 1);
-        } catch (error) {
-            alert('Failed to delete task');
+            await api.delete(`/projects/${id}`);
+            setProjects(previous => previous.filter(project => project._id !== id));
+            return true;
+        } catch (error) { return failure(error, 'Could not delete the project.'); }
+    }
+
+    async function createTask(values) {
+        const projectId = selectedProject._id;
+        setFeedback('');
+        try {
+            const response = await api.post('/tasks', { ...values, projectId });
+            if (activeProject.current === projectId) {
+                setTasks(previous => [...previous, response.data]);
+                setActivityVersion(value => value + 1);
+            }
+            return true;
+        } catch (error) { return failure(error, 'Could not create the task.'); }
+    }
+
+    async function mutateTask(id, values, deleting = false) {
+        if (taskLocks.current.has(id)) return false;
+        const projectId = selectedProject._id;
+        taskLocks.current.add(id);
+        setPendingTasks([...taskLocks.current]);
+        setFeedback('');
+        try {
+            const response = deleting ? await api.delete(`/tasks/${id}`) : await api.put(`/tasks/${id}`, values);
+            if (activeProject.current === projectId) {
+                setTasks(previous => deleting ? previous.filter(task => task._id !== id) : previous.map(task => task._id === id ? response.data : task));
+                setActivityVersion(value => value + 1);
+            }
+            return true;
+        } catch (error) { return failure(error, 'Could not save the task change.'); }
+        finally {
+            taskLocks.current.delete(id);
+            setPendingTasks([...taskLocks.current]);
         }
-    };
+    }
 
-    // 4. Render Layout
-    if (loading) return <div className="loading-screen">Loading workspace...</div>;
-
-    const canCreate = user && (user.role === 'owner' || user.role === 'manager');
-    const isOwner = user && user.role === 'owner';
-
-    return (
-        <div className="dashboard-container fade-in">
-            <nav className="navbar">
-                <div className="navbar-brand" style={{ cursor: 'pointer' }} onClick={() => setViewMode('projects')}>TaskForge</div>
-
-                {canCreate && (
-                    <div className="navbar-workspace" style={{ flex: 1, textAlign: 'center' }}>
-                        <div style={{ color: '#5e6c84', fontSize: '13px', fontWeight: '500' }}>
-                            Workspace Invitation Code: <span style={{ background: '#f4f5f7', color: '#172b4d', padding: '6px 12px', borderRadius: '6px', border: '1px dashed #dfe1e6', userSelect: 'all', fontFamily: 'monospace', letterSpacing: '1px', marginLeft: '6px' }}>{user.workspaceId}</span>
-                        </div>
-                    </div>
-                )}
-
-                <div className="navbar-user">
-                    <span>{user.name}</span>
-                    {isOwner && (
-                        <button onClick={() => setViewMode('team')} className="btn-secondary" style={{ padding: '6px 12px', fontSize: '13px' }}>Manage Team</button>
-                    )}
-                    <button onClick={handleLogout} className="btn-logout" style={{ padding: '6px 12px', fontSize: '13px' }}>Logout</button>
-                </div>
-            </nav>
-
-            <main className="main-content">
-                {viewMode === 'projects' && (
-                    <ProjectList
-                        projects={projects}
-                        canCreate={canCreate}
-                        canDelete={isOwner}
-                        onCreateProject={handleCreateProject}
-                        onOpenProject={openProject}
-                        onDeleteProject={handleDeleteProject}
-                        onUpdateProject={handleUpdateProject}
-                    />
-                )}
-
-                {viewMode === 'tasks' && selectedProject && (
-                    <><TaskTable
-                        project={selectedProject}
-                        tasks={tasks}
-                        team={team}
-                        userRole={user.role}
-                        canCreate={canCreate}
-                        onBack={() => { setSelectedProject(null); setViewMode('projects'); }}
-                        onCreateTask={handleCreateTask}
-                        onMoveTask={handleMoveTask}
-                        onUpdateTask={handleUpdateTask}
-                        onDeleteTask={handleDeleteTask}
-                    /><ActivityFeed key={selectedProject._id} projectId={selectedProject._id} version={activityVersion} /></>
-                )}
-
-                {viewMode === 'team' && (
-                    <TeamList
-                        onBack={() => setViewMode('projects')}
-                        currentUserRole={user.role}
-                    />
-                )}
-            </main>
-        </div>
-    );
-};
-
-export default Dashboard;
+    if (loading) return <div className="loading-screen" role="status">Loading workspace…</div>;
+    if (loadError || !user) return <main className="main-content"><div className="feedback" role="alert">{loadError || 'Your workspace is unavailable.'}</div><button className="btn-primary" onClick={() => setRetry(value => value + 1)}>Retry workspace</button></main>;
+    const canManage = ['owner', 'manager'].includes(user.role);
+    return <div className="dashboard-container">
+        <nav className="navbar">
+            <button className="navbar-brand project-title" onClick={back}>TaskForge</button>
+            {canManage && <p>Workspace ID: <code>{user.workspaceId}</code></p>}
+            <div className="navbar-user"><span>{user.name}</span>{user.role === 'owner' && <button className="btn-secondary" onClick={() => { activeProject.current = null; setView('team'); }}>Manage Team</button>}<button className="btn-logout" onClick={() => { localStorage.removeItem('token'); navigate('/'); }}>Logout</button></div>
+        </nav>
+        <main className="main-content">
+            {feedback && <div className="feedback" role="alert">{feedback} <button className="btn-secondary" onClick={() => setFeedback('')}>Dismiss</button></div>}
+            {view === 'projects' && <ProjectList projects={projects} canCreate={canManage} canDelete={user.role === 'owner'} onCreateProject={createProject} onUpdateProject={updateProject} onDeleteProject={deleteProject} onOpenProject={openProject} />}
+            {view === 'tasks' && selectedProject && <>
+                {tasksLoading ? <><button className="btn-secondary" onClick={back}>Back to Projects</button><p role="status">Loading tasks…</p></> : tasksError ? <><button className="btn-secondary" onClick={back}>Back to Projects</button><p role="alert">{tasksError}</p><button className="btn-primary" onClick={() => openProject(selectedProject)}>Retry tasks</button></> :
+                    <TaskTable key={selectedProject._id} project={selectedProject} tasks={tasks} team={team} pendingTasks={pendingTasks} canCreate={canManage} onBack={back} onCreateTask={createTask} onUpdateTask={mutateTask} onMoveTask={(id, status) => mutateTask(id, { status })} onDeleteTask={id => window.confirm('Delete this task permanently?') && mutateTask(id, null, true)} />}
+                <ActivityFeed key={selectedProject._id} projectId={selectedProject._id} version={activityVersion} team={team} />
+            </>}
+            {view === 'team' && <TeamList onBack={back} currentUserRole={user.role} />}
+        </main>
+    </div>;
+}
