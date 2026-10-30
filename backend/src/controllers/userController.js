@@ -1,4 +1,5 @@
 import User from "../models/User.js";
+import { objectId, respondError } from "../utils/validation.js";
 
 // @route   PUT /api/users/:id/role
 // @desc    Update user role
@@ -11,14 +12,15 @@ export const updateUserRole = async (req, res) => {
             return res.status(400).json({ message: "Invalid role. Only manager or member allowed." });
         }
 
-        const user = await User.findById(req.params.id);
+        objectId(req.params.id, "user ID");
+        const user = await User.findOne({ _id: req.params.id, workspaceId: req.user.workspaceId });
 
         if (!user) {
             return res.status(404).json({ message: "User not found" });
         }
 
-        if (user.workspaceId.toString() !== req.user.workspaceId.toString()) {
-            return res.status(403).json({ message: "Not authorized to update this user" });
+        if (user.role === "owner") {
+            return res.status(403).json({ message: "Workspace owners cannot be demoted through role management" });
         }
 
         user.role = role;
@@ -26,8 +28,7 @@ export const updateUserRole = async (req, res) => {
 
         res.json({ message: "User role updated successfully", user });
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: "Server error" });
+        respondError(res, error);
     }
 };
 

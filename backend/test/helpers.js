@@ -1,6 +1,6 @@
 import { after, before, beforeEach } from "node:test";
 import mongoose from "mongoose";
-import { MongoMemoryServer } from "mongodb-memory-server";
+import { MongoMemoryReplSet } from "mongodb-memory-server";
 import request from "supertest";
 import app from "../src/app.js";
 
@@ -9,7 +9,7 @@ export function useDatabase() {
     let database;
     before(async () => {
         process.env.JWT_SECRET = "test-secret-only-for-integration-tests-123456";
-        database = await MongoMemoryServer.create();
+        database = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
         await mongoose.connect(database.getUri());
         await Promise.all(Object.values(mongoose.models).map(model => model.init()));
     });

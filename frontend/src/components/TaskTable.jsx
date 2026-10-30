@@ -1,7 +1,7 @@
 import React, { useState, memo } from 'react';
 
 // Memoized individual row to prevent the entire table from re-rendering when one task changes
-const TaskRow = memo(({ task, onMoveTask, userRole }) => {
+const TaskRow = memo(({ task, onMoveTask }) => {
     return (
         <tr key={task._id}>
             <td><strong>{task.title}</strong></td>
@@ -21,9 +21,7 @@ const TaskRow = memo(({ task, onMoveTask, userRole }) => {
                 >
                     <option value="todo">Todo</option>
                     <option value="in-progress">In Progress</option>
-                    <option value="done" disabled={userRole === 'owner'}>
-                        Done {userRole === 'owner' ? '(Restricted)' : ''}
-                    </option>
+                    <option value="done">Done</option>
                 </select>
             </td>
         </tr>
@@ -85,9 +83,7 @@ const TaskTable = ({ project, tasks, userRole, canCreate, onBack, onCreateTask, 
                             >
                                 <option value="todo">Todo</option>
                                 <option value="in-progress">In Progress</option>
-                                <option value="done" disabled={userRole === 'owner'}>
-                                    Done {userRole === 'owner' ? '(Restricted)' : ''}
-                                </option>
+                                <option value="done">Done</option>
                             </select>
                         </div>
 

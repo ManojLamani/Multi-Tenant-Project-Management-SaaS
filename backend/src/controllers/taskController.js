@@ -51,6 +51,9 @@ export const updateTask = async (req, res) => {
     try {
         objectId(req.params.id, "task ID");
         const changes = taskInput(req.body);
+        if (req.user.role === "member" && Object.keys(changes).some(key => key !== "status")) {
+            return res.status(403).json({ message: "Members can only change task status" });
+        }
         const task = await Task.findOne({ _id: req.params.id, workspaceId: req.user.workspaceId });
         if (!task) return res.status(404).json({ message: "Task not found" });
 
@@ -62,7 +65,7 @@ export const updateTask = async (req, res) => {
         }
 
         const updatedTask = await Task.findOneAndUpdate(
-            { _id: req.params.id, workspaceId: req.user.workspaceId }, { $set: changes }, { new: true, runValidators: true })
+            { _id: req.params.id, workspaceId: req.user.workspaceId }, { $set: changes }, { returnDocument: "after", runValidators: true })
             .populate("projectId", "name")
             .populate("completedBy", "name");
 
