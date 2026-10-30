@@ -1,4 +1,6 @@
 import Project from "../models/Project.js";
+import Task from "../models/Task.js";
+import mongoose from "mongoose";
 import { objectId, projectInput, respondError } from "../utils/validation.js";
 
 // @route   POST /api/projects
@@ -45,7 +47,7 @@ export const updateProject = async (req, res) => {
         const updatedProject = await Project.findOneAndUpdate(
             { _id: req.params.id, workspaceId: req.user.workspaceId },
             { $set: changes },
-            { new: true, runValidators: true }
+            { returnDocument: "after", runValidators: true }
         );
         if (!updatedProject) return res.status(404).json({ message: "Project not found" });
         res.json(updatedProject);
@@ -66,7 +68,10 @@ export const deleteProject = async (req, res) => {
             return res.status(404).json({ message: "Project not found" });
         }
 
-        await Project.deleteOne({ _id: req.params.id, workspaceId: req.user.workspaceId });
+        await mongoose.connection.transaction(async session => {
+            await Task.deleteMany({ projectId: project._id, workspaceId: req.user.workspaceId }, { session });
+            await Project.deleteOne({ _id: project._id, workspaceId: req.user.workspaceId }, { session });
+        });
         res.json({ message: "Project removed" });
     } catch (error) {
         respondError(res, error);
