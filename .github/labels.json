@@ -1,0 +1,74 @@
+{
+  "security": {
+    "color": "b60205",
+    "description": "Protect authentication, authorization, and sensitive data"
+  },
+  "authentication": {
+    "color": "d93f0b",
+    "description": "Sign-in, credentials, tokens, and session handling"
+  },
+  "authorization": {
+    "color": "e99695",
+    "description": "Role permissions and resource access checks"
+  },
+  "multi-tenancy": {
+    "color": "5319e7",
+    "description": "Workspace boundaries and tenant data isolation"
+  },
+  "backend": {
+    "color": "1d76db",
+    "description": "Express API, middleware, and server behavior"
+  },
+  "frontend": {
+    "color": "61dafb",
+    "description": "React interface and browser behavior"
+  },
+  "database": {
+    "color": "006b75",
+    "description": "MongoDB models, indexes, transactions, and consistency"
+  },
+  "testing": {
+    "color": "bfd4f2",
+    "description": "Regression, integration, and interaction tests"
+  },
+  "ci": {
+    "color": "0e8a16",
+    "description": "Continuous integration and automated quality checks"
+  },
+  "accessibility": {
+    "color": "7057ff",
+    "description": "Keyboard access, labels, and accessible interaction"
+  },
+  "performance": {
+    "color": "fbca04",
+    "description": "Query efficiency, indexing, and loading behavior"
+  },
+  "configuration": {
+    "color": "c5def5",
+    "description": "Environment variables, startup, and development setup"
+  },
+  "ui/ux": {
+    "color": "f9d0c4",
+    "description": "User interface, feedback, navigation, and usability"
+  },
+  "automation": {
+    "color": "ededed",
+    "description": "Automatic labeling and contribution workflows"
+  },
+  "bug": {
+    "color": "d73a4a",
+    "description": "Something is not working as expected"
+  },
+  "enhancement": {
+    "color": "a2eeef",
+    "description": "New feature or improvement"
+  },
+  "documentation": {
+    "color": "0075ca",
+    "description": "Documentation improvements"
+  },
+  "dependencies": {
+    "color": "0366d6",
+    "description": "Dependency manifests and lockfiles"
+  }
+}

@@ -1,0 +1,48 @@
+name: Classify contributions
+
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened]
+  issues:
+    types: [opened, edited, reopened]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: labels-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  labels:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Always run classifier code from the trusted default branch, never PR code.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const { contributionLabels } = require('./.github/scripts/contribution-labels.cjs');
+            const definitions = require('./.github/labels.json');
+            const item = context.payload.pull_request || context.payload.issue;
+            const files = context.payload.pull_request
+              ? await github.paginate(github.rest.pulls.listFiles, { ...context.repo, pull_number: item.number, per_page: 100 })
+              : [];
+            const labels = contributionLabels({ title: item.title, body: item.body || '', files: files.map(file => file.filename) });
+            if (!labels.length) return;
+            const existing = await github.paginate(github.rest.issues.listLabelsForRepo, { ...context.repo, per_page: 100 });
+            for (const name of labels) {
+              if (existing.some(label => label.name === name)) continue;
+              try {
+                await github.rest.issues.createLabel({ ...context.repo, name, ...definitions[name] });
+              } catch (error) {
+                if (error.status !== 422) throw error;
+              }
+            }
+            await github.rest.issues.addLabels({ ...context.repo, issue_number: item.number, labels });
