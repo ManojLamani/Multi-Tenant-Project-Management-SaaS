@@ -11,6 +11,7 @@ const Dashboard = () => {
     const [projects, setProjects] = useState([]);
     const [selectedProject, setSelectedProject] = useState(null);
     const [tasks, setTasks] = useState([]);
+    const [team, setTeam] = useState([]);
     const [loading, setLoading] = useState(true);
 
     // View state strings: 'projects' | 'tasks' | 'team'
@@ -25,12 +26,14 @@ const Dashboard = () => {
 
         const fetchData = async () => {
             try {
-                const [userRes, projectsRes] = await Promise.all([
+                const [userRes, projectsRes, teamRes] = await Promise.all([
                     api.get('/auth/me'),
-                    api.get('/projects')
+                    api.get('/projects'),
+                    api.get('/users')
                 ]);
                 setUser(userRes.data.user);
                 setProjects(projectsRes.data);
+                setTeam(teamRes.data);
             } catch (error) {
                 if (error.response?.status === 401) {
                     localStorage.removeItem('token');
@@ -82,9 +85,8 @@ const Dashboard = () => {
         setSelectedProject(project);
         setViewMode('tasks');
         try {
-            const res = await api.get('/tasks');
-            const projectTasks = res.data.filter(t => (t.projectId?._id || t.projectId) === project._id);
-            setTasks(projectTasks);
+            const res = await api.get('/tasks', { params: { projectId: project._id } });
+            setTasks(res.data);
         } catch (error) {
             console.error(error);
         }
@@ -94,9 +96,11 @@ const Dashboard = () => {
     const handleCreateTask = async (newTaskData) => {
         try {
             const res = await api.post('/tasks', { ...newTaskData, projectId: selectedProject._id });
-            setTasks([...tasks, { ...res.data, projectId: { _id: selectedProject._id } }]);
+            setTasks(previous => [...previous, res.data]);
+            return true;
         } catch (error) {
             alert("Failed to create task");
+            return false;
         }
     };
 
@@ -106,6 +110,27 @@ const Dashboard = () => {
             setTasks(tasks.map(t => t._id === taskId ? { ...t, status: res.data.status, completedBy: res.data.completedBy } : t));
         } catch (error) {
             alert("Failed to update task status");
+        }
+    };
+
+    const handleUpdateTask = async (taskId, changes) => {
+        try {
+            const res = await api.put(`/tasks/${taskId}`, changes);
+            setTasks(previous => previous.map(task => task._id === taskId ? res.data : task));
+            return true;
+        } catch (error) {
+            alert(error.response?.data?.message || 'Failed to update task');
+            return false;
+        }
+    };
+
+    const handleDeleteTask = async taskId => {
+        if (!window.confirm('Delete this task permanently?')) return;
+        try {
+            await api.delete(`/tasks/${taskId}`);
+            setTasks(previous => previous.filter(task => task._id !== taskId));
+        } catch (error) {
+            alert('Failed to delete task');
         }
     };
 
@@ -154,11 +179,14 @@ const Dashboard = () => {
                     <TaskTable
                         project={selectedProject}
                         tasks={tasks}
+                        team={team}
                         userRole={user.role}
                         canCreate={canCreate}
                         onBack={() => { setSelectedProject(null); setViewMode('projects'); }}
                         onCreateTask={handleCreateTask}
                         onMoveTask={handleMoveTask}
+                        onUpdateTask={handleUpdateTask}
+                        onDeleteTask={handleDeleteTask}
                     />
                 )}
 
