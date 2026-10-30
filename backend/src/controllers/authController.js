@@ -26,35 +26,35 @@ export const registerUser = async (req, res) => {
             return res.status(400).json({ message: "Provide a name, valid email, password of 8–72 bytes, and one workspace option" });
         }
 
-        if (await User.findOne({ email })) {
+        if (await User.findOne({ email }).collation({ locale: "en", strength: 2 })) {
             return res.status(400).json({ message: "User already exists" });
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
-        let organization, workspaceId, role = "member";
-
-        if (organizationName) {
-            organization = new Organization({ name: organizationName });
-            workspaceId = organization._id;
-            role = "owner";
-        } else {
-            if (!mongoose.Types.ObjectId.isValid(orgId)) return res.status(400).json({ message: "Invalid Workspace ID" });
-            const orgExists = await Organization.findById(orgId);
-            if (!orgExists) return res.status(404).json({ message: "Organization not found" });
-            workspaceId = orgId;
+        if (!organizationName && !mongoose.Types.ObjectId.isValid(orgId)) {
+            return res.status(400).json({ message: "Invalid Workspace ID" });
         }
-
-        const user = new User({ name, email, password: hashedPassword, role, workspaceId });
-        await user.save();
-
-        if (organization) {
-            organization.ownerId = user._id;
-            await organization.save();
-        }
+        const user = await mongoose.connection.transaction(async session => {
+            const organization = organizationName ? new Organization({ name: organizationName.trim() }) : null;
+            const workspaceId = organization?._id || orgId;
+            if (!organization && !await Organization.exists({ _id: workspaceId }).session(session)) {
+                throw Object.assign(new Error("Organization not found"), { status: 404 });
+            }
+            const [created] = await User.create([{
+                name: name.trim(), email, password: hashedPassword,
+                role: organization ? "owner" : "member", workspaceId
+            }], { session });
+            if (organization) {
+                organization.ownerId = created._id;
+                await organization.save({ session });
+            }
+            return created;
+        });
 
         res.status(201).json({ message: "Registered successfully", user });
     } catch (error) {
         if (error.code === 11000) return res.status(409).json({ message: "User already exists" });
+        if (error.status === 404) return res.status(404).json({ message: error.message });
         res.status(500).json({ message: "Registration failed" });
     }
 };
@@ -70,7 +70,7 @@ export const loginUser = async (req, res) => {
         const email = typeof req.body.email === "string" ? req.body.email.trim().toLowerCase() : "";
         if (!email || typeof password !== "string" || !password) return res.status(400).json({ message: "Missing credentials" });
 
-        const user = await User.findOne({ email }).select("+password");
+        const user = await User.findOne({ email }).collation({ locale: "en", strength: 2 }).select("+password");
         if (!user || !(await bcrypt.compare(password, user.password))) {
             return res.status(401).json({ message: "Invalid email or password" });
         }
