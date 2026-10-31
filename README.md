@@ -1,70 +1,78 @@
-# TaskForge — Multi-Tenant Project Management
+# TaskForge
 
-TaskForge is a React and Express application for teams to manage projects in isolated organization workspaces. MongoDB stores users, projects, tasks, and task activity history.
+**Multi-tenant project management with isolated workspaces, team roles, and task tracking.**
+
+[![Quality checks](https://github.com/ManojLamani/Multi-Tenant-Project-Management-SaaS/actions/workflows/quality.yml/badge.svg?branch=main)](https://github.com/ManojLamani/Multi-Tenant-Project-Management-SaaS/actions/workflows/quality.yml)
+
+[Quick start](#quick-start) · [Features](#features) · [API](#api) · [Deployment](#deployment) · [Contributing](CONTRIBUTING.md)
+
+TaskForge is a full-stack MVP built with React, Express, and MongoDB. Each account belongs to one workspace, and the API scopes project, task, team, invitation, and activity access to that workspace.
 
 ## Features
 
-- Workspace registration and joining through owner-issued, email-specific invitations.
-- JWT authentication with password hashes excluded from API responses.
-- Owner, manager, and member permissions enforced by the API.
-- Project creation, editing, and transactional deletion of associated tasks/history.
-- Project archive/restore with active, archived, and all-project views and read-only task history.
-- Tasks with assignees, priorities, due dates, status, and completion attribution.
-- Task editing/deletion, search, and status/priority/assignee filters.
-- Table and Kanban views with project completion and overdue-task metrics.
-- Recent task activity with actors, timestamps, and before/after changes.
-- Automated backend integration tests and frontend interaction, lint, and build checks.
+- **Team workspaces:** create a workspace, invite new teammates, and manage owner, manager, and member roles.
+- **Projects:** create, edit, archive, restore, or permanently delete projects and their associated tasks/history.
+- **Task planning:** assign teammates, set priorities and due dates, search tasks, and filter by status, priority, or assignee.
+- **Table and board views:** update task status and review completion progress and overdue tasks.
+- **Activity history:** inspect recent task changes with actors, timestamps, and before/after values.
+- **Access controls:** JWT authentication, hashed passwords, tenant-scoped queries, and API-enforced role permissions.
 
-## Requirements
+| Layer | Stack |
+| --- | --- |
+| Frontend | React, Vite, React Router, Axios |
+| Backend | Node.js, Express, JWT, bcrypt |
+| Database | MongoDB replica set, Mongoose |
+| Checks | Node.js integration tests, Vitest, Testing Library, ESLint, GitHub Actions |
 
-- Node.js 24 and npm (the repository includes `.nvmrc`).
-- A MongoDB replica set, such as MongoDB Atlas, or Docker with Compose for the local database below. Transactions are required for task mutations and project deletion; a standalone MongoDB server is insufficient.
+## Quick start
 
-## Run locally
+You need **Node.js 24**, npm, and either **Docker with Compose** or an existing **MongoDB replica set**. The included `.nvmrc` specifies Node.js 24. A standalone MongoDB server cannot run the transactions used by registration, invitations, task changes, and project deletion.
 
-### 1. Start MongoDB
-
-From the repository root:
+### 1. Clone and configure
 
 ```sh
-docker compose up -d --wait
+git clone https://github.com/ManojLamani/Multi-Tenant-Project-Management-SaaS.git
+cd Multi-Tenant-Project-Management-SaaS
 ```
 
-Compose initializes a single-node replica set, binds the database to `127.0.0.1:27017`, and persists data in a named volume. This database configuration is for local development. An existing Atlas replica set can be used instead by setting its connection string in `MONGO_URI`.
-
-### 2. Configure and start the backend
-
-Copy `backend/.env.example` to `backend/.env`. PowerShell:
+Copy the environment templates. PowerShell:
 
 ```powershell
 Copy-Item backend/.env.example backend/.env
+Copy-Item frontend/.env.example frontend/.env
 ```
 
 macOS/Linux:
 
 ```sh
 cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
 ```
 
-Generate a JWT secret and paste it into the `JWT_SECRET` value in `backend/.env`:
+Generate a signing secret and paste the output into `JWT_SECRET` in `backend/.env`:
 
 ```sh
 node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 ```
 
-Then run:
+### 2. Start the database and API
+
+From the repository root:
 
 ```sh
+docker compose up -d --wait
 cd backend
 npm ci
 npm run dev
 ```
 
-The backend starts at `http://localhost:5000` after connecting to MongoDB. Startup fails if required configuration is missing or the database cannot be reached. Changing the JWT secret invalidates existing sessions.
+Compose starts a local MongoDB replica set at `127.0.0.1:27017` and stores its data in a named volume. To use an existing replica set instead, set `MONGO_URI` in `backend/.env` and skip the Compose command.
+
+The API starts at `http://localhost:5000` after connecting to the database. Startup fails when required configuration is invalid or the database cannot be reached.
 
 ### 3. Start the frontend
 
-In a second terminal:
+In another terminal, from the repository root:
 
 ```sh
 cd frontend
@@ -72,109 +80,100 @@ npm ci
 npm run dev
 ```
 
-Open `http://localhost:5173`. The frontend defaults to `http://localhost:5000/api`. To change it, copy `frontend/.env.example` to `frontend/.env` and set `VITE_API_URL`, including `/api`. Restart Vite after changing frontend environment variables. If Vite selects another port, add that origin to backend `CLIENT_ORIGINS` or free port 5173.
+Open **http://localhost:5173**. The frontend defaults to `http://localhost:5000/api`. If Vite uses another port, add its origin to `CLIENT_ORIGINS` and restart the backend. Restart Vite after changing frontend environment variables.
 
-### 4. Try the workflow
+### 4. Try the team workflow
 
-1. Register and choose **Create Workspace** to become its owner.
-2. Create a project and add tasks with a priority, assignee, and due date.
-3. Open **Manage Team → Invite a teammate**, enter their email, and create an invite link. Copy and share the link privately; the teammate registers using that email. Links expire in seven days and work once.
-4. Use **Manage Team** to promote a member to manager.
-5. Switch between table and board views, filter tasks, change status, and inspect recent activity.
+1. Register with **Create Workspace** to become its owner, then sign in.
+2. Create a project and add tasks with assignees, priorities, and due dates.
+3. Open **Manage Team → Invite a teammate**, create an email-specific link, and share it privately. The recipient registers with the invited email and then signs in.
+4. Promote a member to manager through **Manage Team** when needed.
+5. Switch between table and board views, filter tasks, and inspect task activity.
+6. Archive a completed project. Use **Project status → Archived projects** to view or restore it.
 
-### Stop the local database
-
-```sh
-docker compose down
-```
-
-The named volume preserves data between starts.
-
-## Workspace invitations
-
-Only workspace owners can create, list, and revoke invitations. The owner copies a link to share with its intended recipient; the application does not send email. Invite links use a URL fragment so the code is not included in HTTP request URLs. Raw codes are shown only when created, remain in page memory, and are not stored in the database; only their SHA-256 hashes are stored.
-
-Acceptance requires the invited email address and an unexpired, pending code. The invitation is consumed in the same database transaction that creates the member account, so a failed registration can be retried. Reissuing a pending invitation invalidates its previous link. Owners can revoke pending invitations from the team page. The list shows the latest 50 invitations, including accepted and revoked entries.
-
-Invitations currently create new accounts. An email that already has an account cannot be invited into another workspace through this flow; each account belongs to one workspace.
-
-Migration: workspace IDs no longer grant membership. Existing users keep their workspaces and sign in normally. Update clients that send `orgId` at registration to send `inviteToken`, and deploy the frontend and API together. New workspace creation continues to use `organizationName`.
+To stop the local database, run `docker compose down` from the repository root. The named volume preserves data between starts.
 
 ## Configuration
 
-| Variable | Location | Purpose |
+| Variable | Where | Value |
 | --- | --- | --- |
 | `MONGO_URI` | Backend | Required MongoDB replica-set connection string. |
-| `JWT_SECRET` | Backend | Required randomly generated signing secret of at least 32 characters. |
+| `JWT_SECRET` | Backend | Required random signing secret of at least 32 characters. Changing it invalidates existing sessions. |
 | `PORT` | Backend | API port; defaults to `5000`. |
-| `CLIENT_ORIGINS` | Backend | Comma-separated HTTP(S) frontend origins. Defaults to localhost/127.0.0.1 port 5173 in development; required in production. |
-| `NODE_ENV` | Backend | Set to `production` for deployed environments. |
-| `VITE_API_URL` | Frontend | API base URL including `/api`; baked into the frontend at build time. |
+| `CLIENT_ORIGINS` | Backend | Comma-separated frontend HTTP(S) origins. Defaults to localhost/127.0.0.1 port 5173 in development; required in production. |
+| `NODE_ENV` | Backend | Set to `production` for deployments. |
+| `VITE_API_URL` | Frontend | API base URL ending in `/api`; embedded at build time. |
 
-Never put database credentials or JWT signing secrets in frontend variables. Real `.env` files are ignored by Git; `.env.example` templates contain no credentials. Production deployments should use HTTPS and their actual frontend origin.
+Real `.env` files are ignored by Git. Keep database credentials and JWT secrets on the backend; `VITE_*` values are visible to the browser.
 
 ## Permissions
 
 | Action | Owner | Manager | Member |
 | --- | --- | --- | --- |
-| View workspace projects, tasks, team, activity | Yes | Yes | Yes |
-| Create/edit projects | Yes | Yes | No |
-| Archive/restore projects | Yes | Yes | No |
-| Delete projects and associated tasks/history | Yes | No | No |
-| Create/edit task content, assignment, priority, due date | Yes | Yes | No |
+| View workspace projects, tasks, team, and activity | Yes | Yes | Yes |
+| Create/edit projects; archive/restore projects | Yes | Yes | No |
+| Permanently delete projects and their tasks/history | Yes | No | No |
+| Create/edit task content, assignment, priority, and due date | Yes | Yes | No |
 | Change task status | Yes | Yes | Yes |
 | Delete tasks | Yes | Yes | No |
 | Change member/manager roles | Yes | No | No |
-| Create/list/revoke workspace invitations | Yes | No | No |
+| Create/list/revoke invitations | Yes | No | No |
 
-Owners cannot be demoted through role management. Workspace IDs, project membership, creator IDs, and completion attribution cannot be changed through update payloads. Task assignees must belong to the current workspace.
+Owners cannot be demoted through role management. Task assignees must belong to the current workspace. Update payloads cannot transfer records between workspaces or change a task's project or completion attribution.
 
-## API overview
+### Invitations
 
-Protected routes require `Authorization: Bearer <token>`. IDs are MongoDB ObjectIds. Due dates use `YYYY-MM-DD`; send `null` to clear a due date or assignee.
+Invitations are bound to an email address, expire after **seven days**, and can be accepted once. The owner copies and shares the link manually; the application does not send email. Raw codes are shown only when created, while the database stores their SHA-256 hashes. Accepting an invitation and creating its member account happen in one transaction.
 
-| Method | Route | Description |
+Owners can revoke pending invitations or generate a replacement that invalidates the previous link. The list shows the latest 50 invitations. This flow creates new accounts; an existing account cannot join a second workspace.
+
+**Registration compatibility:** workspace IDs no longer grant membership. Clients joining a workspace must send `inviteToken` instead of `orgId`. Creating a workspace still uses `organizationName`; existing users can sign in normally.
+
+### Archived projects
+
+Archived projects retain their tasks and activity in read-only table and board views. Project edits and all task mutations, including status changes, return HTTP **409** until an owner or manager restores the project. An owner can still permanently delete an archived project after confirmation.
+
+The project list defaults to active projects; choose **Archived projects** or **All projects** to browse the others. Existing projects without archive metadata remain active without a migration.
+
+## API
+
+Protected endpoints require `Authorization: Bearer <token>`. IDs are MongoDB ObjectIds. Due dates use `YYYY-MM-DD`; send `null` to clear an assignee or due date.
+
+| Method | Endpoint | Purpose |
 | --- | --- | --- |
 | POST | `/api/auth/register` | Register with `name`, `email`, `password`, and either `organizationName` or `inviteToken`. |
-| POST | `/api/auth/login` | Sign in with email/password; receive a token and sanitized user. |
+| POST | `/api/auth/login` | Return a token and a user without a password hash. |
 | GET | `/api/auth/me` | Current user. |
-| GET / POST | `/api/projects` | List/create workspace projects. |
-| PUT / DELETE | `/api/projects/:id` | Edit/delete a workspace project. |
-| PUT | `/api/projects/:id/archive` | Owner/manager archives or restores a project with `{ "archived": true }` or `{ "archived": false }`. |
-| GET | `/api/projects/:id/activity` | Latest 50 task events for an accessible project. |
+| GET / POST | `/api/projects` | List/create projects. |
+| PUT / DELETE | `/api/projects/:id` | Edit/permanently delete a project. |
+| PUT | `/api/projects/:id/archive` | Archive or restore with `{ "archived": true }` or `{ "archived": false }`. |
+| GET | `/api/projects/:id/activity` | Latest 50 task events. |
 | GET / POST | `/api/tasks` | List/create tasks. |
-| PUT / DELETE | `/api/tasks/:id` | Edit/delete an accessible task. |
+| PUT / DELETE | `/api/tasks/:id` | Edit/delete a task. |
 | GET | `/api/users` | Workspace team. |
 | PUT | `/api/users/:id/role` | Set `role` to `manager` or `member`. |
-| POST | `/api/invitations` | Owner creates an invitation with `{ "email": "teammate@example.com" }`; returns metadata and a one-time raw code. |
-| GET | `/api/invitations` | Owner lists the workspace's latest 50 invitations, without codes or hashes. |
-| DELETE | `/api/invitations/:id` | Owner revokes a pending invitation in their workspace; returns 204. |
+| POST | `/api/invitations` | Create with `{ "email": "teammate@example.com" }`; return metadata and the raw code. |
+| GET | `/api/invitations` | Latest 50 invitations, without codes or hashes. |
+| DELETE | `/api/invitations/:id` | Revoke a pending invitation; return 204. |
 | GET | `/api/ping` | Process liveness. |
-| GET | `/api/ready` | Database connection readiness (200 or 503). |
+| GET | `/api/ready` | Database readiness; return 200 or 503. |
 
-Task listing accepts combined `projectId`, `status`, `priority`, `assignedTo`, and `q` query parameters. Search treats text literally. The interface filters the loaded project's tasks locally. Existing tasks without planning metadata appear as medium priority, unassigned, and without a due date. Activity history starts with changes made after the feature is installed.
+Project listing accepts `archived=false` (default), `archived=true`, or `archived=all`. Task listing combines `projectId`, `status`, `priority`, `assignedTo`, and `q`; search treats text literally. The frontend filters the loaded project/task lists locally.
 
-## Archive completed projects
-
-Owners and managers can choose **Archive** on a project card. Archived projects leave the default active view; use **Project status → Archived projects** to open them or restore them. All workspace roles can still read their tasks and task activity. Project edits and task creation, editing, status changes, and deletion return HTTP 409 while the project is archived. Table and board controls are read only. Restore the project to resume those operations under the usual role permissions.
-
-Archiving preserves all tasks and history. A task transaction that loses a race with archiving is rolled back, including any activity entry. An owner can still choose **Delete** to permanently remove an archived project and its associated data after confirmation.
-
-`GET /api/projects` returns active projects by default. Use `?archived=true` for archived projects, `?archived=false` for active projects, or `?archived=all` for both. Unsupported or repeated archive filter values return HTTP 400. The interface loads both groups and filters locally. Existing projects without `archivedAt` remain active without a data migration. Deploy the frontend and backend together so the interface can access the archive/restore endpoint and display read-only controls.
+Existing tasks without planning metadata appear as medium priority, unassigned, and without a due date. Activity history records changes made after activity tracking was introduced.
 
 ## Validation
 
-Backend:
+Backend, from the repository root:
 
 ```sh
 cd backend
 npm ci
 npm test
+npm audit --omit=dev --audit-level=high
 ```
 
-Tests launch a disposable single-node MongoDB replica set; they do not use `MONGO_URI` or modify your application database. The first run may download a MongoDB binary and requires network access. Coverage includes authentication, tenant isolation, role restrictions, planning validation, transactional cleanup, activity rollback, invitation expiry/revocation/email binding, concurrent acceptance, registration rollback, configuration, and CORS.
-
-Frontend:
+Frontend, in another terminal from the repository root:
 
 ```sh
 cd frontend
@@ -182,22 +181,35 @@ npm ci
 npm run lint
 npm test
 npm run build
+npm audit --omit=dev --audit-level=high
 ```
 
-GitHub Actions runs these checks for pushes and pull requests. For production, serve `frontend/dist` with SPA fallback routing to `index.html`, set the production API URL before building, and run `npm start` in `backend` with the configured environment.
+Backend integration tests use a disposable MongoDB replica set and do not use `MONGO_URI` or modify the application database. The first run may download a MongoDB binary. Coverage includes authentication, tenant isolation, roles, invitations, archive/restore, concurrent mutations, transaction rollback, validation, and CORS. Frontend tests cover interactions, permissions, loading/retry states, and stale-response handling.
 
-## Project layout
+GitHub Actions runs tests, production dependency audits, lint, and the frontend build on pushes and pull requests. Contribution-label checks can also be run from the repository root:
+
+```sh
+node --test .github/scripts/contribution-labels.test.cjs
+```
+
+## Deployment
+
+- **Frontend:** build `frontend` with `npm run build` and serve `dist`. Set `VITE_API_URL` to the HTTPS backend URL ending in `/api` before building. Configure SPA fallback routing to `index.html` for direct `/register` and `/dashboard` requests, including invitation links.
+- **Backend:** install dependencies in `backend`, configure the environment, and run `npm start` with `NODE_ENV=production`. Use a MongoDB replica set and include the deployed frontend origin in `CLIENT_ORIGINS`.
+- **Vercel:** use `frontend` as the Root Directory, the Vite preset, and `dist` as the output directory. The routing configuration is tracked in [PR #16](https://github.com/ManojLamani/Multi-Tenant-Project-Management-SaaS/pull/16).
+- **Verify:** check `/api/ping` and `/api/ready`, direct page loads, login, and a complete owner/member workflow. Deploy frontend and API changes together when their contracts change.
+
+**Verification status:** the 31 October 2026 audit passed local full-stack checks, but public API health probes timed out and direct frontend routes returned 404. Production end-to-end verification remains pending; passing CI alone does not establish deployment readiness.
+
+## Project structure
 
 ```text
-backend/src/config       Environment, database, and token configuration
-backend/src/controllers Request handlers
-backend/src/middleware  Authentication and role checks
-backend/src/models      Workspace, user, project, task, and activity models
-backend/src/routes      API routes
-backend/src/utils       Input validation and transactional activity helpers
-backend/test            Database-backed integration tests
-frontend/src/components Project/task views, forms, board, progress, and history
-frontend/src/pages      Authentication and dashboard pages
-.github/workflows       Automated quality checks
-compose.yaml            Local MongoDB replica set
+backend/src/          API controllers, routes, middleware, models, and utilities
+backend/test/         Database-backed integration tests
+frontend/src/         React pages, components, API client, and interaction tests
+.github/              Quality checks, contribution labels, and issue/PR templates
+compose.yaml          Local MongoDB replica set
+CONTRIBUTING.md       Contribution workflow, labels, and Project board automation
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for focused pull requests, automatic labels, and GitHub Project workflows.
