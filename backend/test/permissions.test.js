@@ -9,8 +9,8 @@ const auth = { type: "bearer" };
 
 test("members can change status; managers and owners can manage task content", async () => {
     const owner = await createWorkspace();
-    const member = await createMember(owner.user.workspaceId);
-    const manager = await createMember(owner.user.workspaceId, "manager@example.com");
+    const member = await createMember(owner);
+    const manager = await createMember(owner, "manager@example.com");
     await api.put(`/api/users/${manager.user._id}/role`).auth(owner.token, auth).send({ role: "manager" }).expect(200);
     const project = (await api.post("/api/projects").auth(owner.token, auth).send({ name: "Project" }).expect(201)).body;
     await api.post("/api/tasks").auth(member.token, auth).send({ title: "Bad", projectId: project._id }).expect(403);

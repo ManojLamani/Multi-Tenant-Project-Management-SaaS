@@ -30,9 +30,10 @@ export async function createWorkspace(email = "owner@example.com") {
     return { user: registration.body.user, token: login.body.token };
 }
 
-export async function createMember(workspaceId, email = "member@example.com") {
+export async function createMember(owner, email = "member@example.com") {
+    const invitation = await api.post("/api/invitations").auth(owner.token, { type: "bearer" }).send({ email }).expect(201);
     const registration = await api.post("/api/auth/register").send({
-        name: "Team member", email, password: "password123", orgId: workspaceId
+        name: "Team member", email, password: "password123", inviteToken: invitation.body.token
     }).expect(201);
     const login = await api.post("/api/auth/login").send({ email, password: "password123" }).expect(200);
     return { user: registration.body.user, token: login.body.token };

@@ -4,7 +4,7 @@ TaskForge is a React and Express application for teams to manage projects in iso
 
 ## Features
 
-- Workspace registration and joining with a workspace ID.
+- Workspace registration and joining through owner-issued, email-specific invitations.
 - JWT authentication with password hashes excluded from API responses.
 - Owner, manager, and member permissions enforced by the API.
 - Project creation, editing, and transactional deletion of associated tasks/history.
@@ -77,7 +77,7 @@ Open `http://localhost:5173`. The frontend defaults to `http://localhost:5000/ap
 
 1. Register and choose **Create Workspace** to become its owner.
 2. Create a project and add tasks with a priority, assignee, and due date.
-3. Share the workspace ID with a teammate, who registers using **Join Existing**. The workspace ID currently acts as the join credential; share it only with intended team members.
+3. Open **Manage Team → Invite a teammate**, enter their email, and create an invite link. Copy and share the link privately; the teammate registers using that email. Links expire in seven days and work once.
 4. Use **Manage Team** to promote a member to manager.
 5. Switch between table and board views, filter tasks, change status, and inspect recent activity.
 
@@ -88,6 +88,16 @@ docker compose down
 ```
 
 The named volume preserves data between starts.
+
+## Workspace invitations
+
+Only workspace owners can create, list, and revoke invitations. The owner copies a link to share with its intended recipient; the application does not send email. Invite links use a URL fragment so the code is not included in HTTP request URLs. Raw codes are shown only when created, remain in page memory, and are not stored in the database; only their SHA-256 hashes are stored.
+
+Acceptance requires the invited email address and an unexpired, pending code. The invitation is consumed in the same database transaction that creates the member account, so a failed registration can be retried. Reissuing a pending invitation invalidates its previous link. Owners can revoke pending invitations from the team page. The list shows the latest 50 invitations, including accepted and revoked entries.
+
+Invitations currently create new accounts. An email that already has an account cannot be invited into another workspace through this flow; each account belongs to one workspace.
+
+Migration: workspace IDs no longer grant membership. Existing users keep their workspaces and sign in normally. Update clients that send `orgId` at registration to send `inviteToken`, and deploy the frontend and API together. New workspace creation continues to use `organizationName`.
 
 ## Configuration
 
@@ -113,6 +123,7 @@ Never put database credentials or JWT signing secrets in frontend variables. Rea
 | Change task status | Yes | Yes | Yes |
 | Delete tasks | Yes | Yes | No |
 | Change member/manager roles | Yes | No | No |
+| Create/list/revoke workspace invitations | Yes | No | No |
 
 Owners cannot be demoted through role management. Workspace IDs, project membership, creator IDs, and completion attribution cannot be changed through update payloads. Task assignees must belong to the current workspace.
 
@@ -122,7 +133,7 @@ Protected routes require `Authorization: Bearer <token>`. IDs are MongoDB Object
 
 | Method | Route | Description |
 | --- | --- | --- |
-| POST | `/api/auth/register` | Register with `name`, `email`, `password`, and either `organizationName` or `orgId`. |
+| POST | `/api/auth/register` | Register with `name`, `email`, `password`, and either `organizationName` or `inviteToken`. |
 | POST | `/api/auth/login` | Sign in with email/password; receive a token and sanitized user. |
 | GET | `/api/auth/me` | Current user. |
 | GET / POST | `/api/projects` | List/create workspace projects. |
@@ -132,6 +143,9 @@ Protected routes require `Authorization: Bearer <token>`. IDs are MongoDB Object
 | PUT / DELETE | `/api/tasks/:id` | Edit/delete an accessible task. |
 | GET | `/api/users` | Workspace team. |
 | PUT | `/api/users/:id/role` | Set `role` to `manager` or `member`. |
+| POST | `/api/invitations` | Owner creates an invitation with `{ "email": "teammate@example.com" }`; returns metadata and a one-time raw code. |
+| GET | `/api/invitations` | Owner lists the workspace's latest 50 invitations, without codes or hashes. |
+| DELETE | `/api/invitations/:id` | Owner revokes a pending invitation in their workspace; returns 204. |
 | GET | `/api/ping` | Process liveness. |
 | GET | `/api/ready` | Database connection readiness (200 or 503). |
 
@@ -147,7 +161,7 @@ npm ci
 npm test
 ```
 
-Tests launch a disposable single-node MongoDB replica set; they do not use `MONGO_URI` or modify your application database. The first run may download a MongoDB binary and requires network access. Coverage includes authentication, tenant isolation, role restrictions, planning validation, transactional cleanup, activity rollback, configuration, and CORS.
+Tests launch a disposable single-node MongoDB replica set; they do not use `MONGO_URI` or modify your application database. The first run may download a MongoDB binary and requires network access. Coverage includes authentication, tenant isolation, role restrictions, planning validation, transactional cleanup, activity rollback, invitation expiry/revocation/email binding, concurrent acceptance, registration rollback, configuration, and CORS.
 
 Frontend:
 

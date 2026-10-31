@@ -7,7 +7,7 @@ const auth = { type: "bearer" };
 
 test("tasks support validated assignees, priorities, due dates and clearing optional fields", async () => {
     const owner = await createWorkspace();
-    const member = await createMember(owner.user.workspaceId);
+    const member = await createMember(owner);
     const outsider = await createWorkspace("outsider@example.com");
     const project = (await api.post("/api/projects").auth(owner.token, auth).send({ name: "Launch" })).body;
     const input = { title: "Launch [v1]", projectId: project._id, assignedTo: member.user._id, priority: "high", dueDate: "2027-02-28" };
