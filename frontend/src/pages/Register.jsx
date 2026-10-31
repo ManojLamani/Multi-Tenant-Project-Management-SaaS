@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import api from '../services/api';
 import './Auth.css';
 
 const Register = () => {
+    const location = useLocation();
+    const linkedInvitation = new URLSearchParams(location.hash.slice(1)).get('invite') || '';
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
 
-    const [orgMode, setOrgMode] = useState('create');
-    const [orgInput, setOrgInput] = useState('');
+    const [orgMode, setOrgMode] = useState(linkedInvitation ? 'join' : 'create');
+    const [orgInput, setOrgInput] = useState(linkedInvitation);
 
     const [error, setError] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -30,18 +32,20 @@ const Register = () => {
             if (orgMode === 'create') {
                 payload.organizationName = orgInput;
             } else {
-                // Validate Workspace ID format (24 hex characters)
-                const isValidId = /^[0-9a-fA-F]{24}$/.test(orgInput);
-                if (!isValidId) {
-                    setError('Workspace ID must be exactly 24 hexadecimal characters.');
-                    setLoading(false);
+                let token = orgInput.trim();
+                try {
+                    const link = new URL(token);
+                    token = new URLSearchParams(link.hash.slice(1)).get('invite') || '';
+                } catch { /* A raw invitation code is also accepted. */ }
+                if (!/^[a-f0-9]{64}$/i.test(token)) {
+                    setError('Paste a valid invitation link or 64-character invitation code from the workspace owner.');
                     return;
                 }
-                payload.orgId = orgInput;
+                payload.inviteToken = token.toLowerCase();
             }
 
             await api.post('/auth/register', payload);
-            navigate('/');
+            navigate('/', { replace: true });
         } catch (err) {
             setError(err.response?.data?.message || 'Registration failed. Please try again.');
         } finally {
@@ -57,7 +61,8 @@ const Register = () => {
                     <p>Create a new TaskForge account</p>
                 </div>
 
-                {error && <div className="error-message">{error}</div>}
+                {error && <div className="error-message" role="alert">{error}</div>}
+                {orgMode === 'join' && <p>Use the email address the workspace owner invited.</p>}
 
                 <form className="auth-form" onSubmit={handleRegister}>
                     <div className="input-group">
@@ -96,26 +101,27 @@ const Register = () => {
                     </div>
 
                     <div className="input-group">
-                        <label>Workspace Setup</label>
+                        <label htmlFor="workspace-setup">{orgMode === 'create' ? 'Workspace name' : 'Invitation link or code'}</label>
                         <div className="toggle-group">
                             <button
                                 type="button"
                                 className={`toggle-btn ${orgMode === 'create' ? 'active' : ''}`}
-                                onClick={() => setOrgMode('create')}
+                                onClick={() => { setOrgMode('create'); setOrgInput(''); setError(null); }}
                             >
                                 Create Workspace
                             </button>
                             <button
                                 type="button"
                                 className={`toggle-btn ${orgMode === 'join' ? 'active' : ''}`}
-                                onClick={() => setOrgMode('join')}
+                                onClick={() => { setOrgMode('join'); setOrgInput(linkedInvitation); setError(null); }}
                             >
-                                Join Existing
+                                Join with Invitation
                             </button>
                         </div>
                         <input
+                            id="workspace-setup"
                             type="text"
-                            placeholder={orgMode === 'create' ? "Your Workspace Name" : "Paste Workspace ID here"}
+                            placeholder={orgMode === 'create' ? "Your Workspace Name" : "Paste invitation link or code"}
                             value={orgInput}
                             onChange={(e) => setOrgInput(e.target.value)}
                             required

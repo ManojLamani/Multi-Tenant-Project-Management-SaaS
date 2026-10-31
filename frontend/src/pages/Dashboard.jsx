@@ -5,6 +5,7 @@ import ProjectList from '../components/ProjectList';
 import TaskTable from '../components/TaskTable';
 import TeamList from '../components/TeamList';
 import ActivityFeed from '../components/ActivityFeed';
+import WorkspaceInvitations from '../components/WorkspaceInvitations';
 import './Dashboard.css';
 
 export default function Dashboard() {
@@ -155,7 +156,6 @@ export default function Dashboard() {
     return <div className="dashboard-container">
         <nav className="navbar">
             <button className="navbar-brand project-title" onClick={back}>TaskForge</button>
-            {canManage && <p>Workspace ID: <code>{user.workspaceId}</code></p>}
             <div className="navbar-user"><span>{user.name}</span>{user.role === 'owner' && <button className="btn-secondary" onClick={() => { activeProject.current = null; setView('team'); }}>Manage Team</button>}<button className="btn-logout" onClick={() => { localStorage.removeItem('token'); navigate('/'); }}>Logout</button></div>
         </nav>
         <main className="main-content">
@@ -166,7 +166,7 @@ export default function Dashboard() {
                     <TaskTable key={`tasks-${selectedProject._id}`} project={selectedProject} tasks={tasks} team={team} pendingTasks={pendingTasks} canCreate={canManage} onBack={back} onCreateTask={createTask} onUpdateTask={mutateTask} onMoveTask={(id, status) => mutateTask(id, { status })} onDeleteTask={id => window.confirm('Delete this task permanently?') && mutateTask(id, null, true)} />}
                 <ActivityFeed key={`activity-${selectedProject._id}`} projectId={selectedProject._id} version={activityVersion} team={team} />
             </>}
-            {view === 'team' && <TeamList onBack={back} currentUserRole={user.role} />}
+            {view === 'team' && <><TeamList onBack={back} currentUserRole={user.role} />{user.role === 'owner' && <WorkspaceInvitations />}</>}
         </main>
     </div>;
 }
