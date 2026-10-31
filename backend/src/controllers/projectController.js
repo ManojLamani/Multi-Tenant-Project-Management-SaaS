@@ -2,7 +2,7 @@ import Project from "../models/Project.js";
 import Task from "../models/Task.js";
 import mongoose from "mongoose";
 import Activity from "../models/Activity.js";
-import { objectId, projectInput, respondError } from "../utils/validation.js";
+import { fields, InputError, objectId, projectInput, respondError } from "../utils/validation.js";
 
 // @route   POST /api/projects
 // @desc    Create a project
@@ -29,12 +29,16 @@ export const createProject = async (req, res) => {
 // @access  Private
 export const getProjects = async (req, res) => {
     try {
-        const projects = await Project.find({ workspaceId: req.user.workspaceId })
+        const archived = req.query.archived ?? "false";
+        if (!["false", "true", "all"].includes(archived)) throw new InputError("Archived filter must be false, true, or all");
+        const filter = { workspaceId: req.user.workspaceId };
+        if (archived === "false") filter.archivedAt = null;
+        if (archived === "true") filter.archivedAt = { $ne: null };
+        const projects = await Project.find(filter)
             .populate("createdBy", "name email");
         res.json(projects);
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: "Server error" });
+        respondError(res, error);
     }
 };
 
@@ -46,15 +50,33 @@ export const updateProject = async (req, res) => {
         objectId(req.params.id, "project ID");
         const changes = projectInput(req.body);
         const updatedProject = await Project.findOneAndUpdate(
-            { _id: req.params.id, workspaceId: req.user.workspaceId },
+            { _id: req.params.id, workspaceId: req.user.workspaceId, archivedAt: null },
             { $set: changes },
             { returnDocument: "after", runValidators: true }
         );
-        if (!updatedProject) return res.status(404).json({ message: "Project not found" });
+        if (!updatedProject) {
+            const exists = await Project.exists({ _id: req.params.id, workspaceId: req.user.workspaceId });
+            return res.status(exists ? 409 : 404).json({ message: exists ? "Restore the archived project before making changes" : "Project not found" });
+        }
         res.json(updatedProject);
     } catch (error) {
         respondError(res, error);
     }
+};
+
+export const setProjectArchived = async (req, res) => {
+    try {
+        objectId(req.params.id, "project ID");
+        fields(req.body, ["archived"]);
+        if (typeof req.body.archived !== "boolean") throw new InputError("Archived must be a boolean");
+        const project = await Project.findOneAndUpdate(
+            { _id: req.params.id, workspaceId: req.user.workspaceId },
+            { $set: { archivedAt: req.body.archived ? new Date() : null } },
+            { returnDocument: "after", runValidators: true }
+        ).populate("createdBy", "name email");
+        if (!project) return res.status(404).json({ message: "Project not found" });
+        res.json(project);
+    } catch (error) { respondError(res, error); }
 };
 
 // @route   DELETE /api/projects/:id

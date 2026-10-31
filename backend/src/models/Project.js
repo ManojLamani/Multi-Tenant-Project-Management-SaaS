@@ -8,6 +8,10 @@ const ProjectSchema = new mongoose.Schema({
   description: {
     type: String
   },
+  archivedAt: {
+    type: Date,
+    default: null
+  },
   workspaceId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Organization",

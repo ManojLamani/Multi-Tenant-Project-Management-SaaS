@@ -24,6 +24,27 @@ it('shows a retry screen instead of crashing when workspace loading fails', asyn
     expect(await screen.findByRole('button', { name: 'Open First' })).toBeInTheDocument();
 });
 
+it('archives and restores through the API while updating project filters and task permissions', async () => {
+    api.get.mockImplementation(workspace);
+    api.put.mockImplementation((_url, { archived }) => Promise.resolve({ data: { ...projects[0], archivedAt: archived ? '2026-10-01T10:00:00Z' : null } }));
+    renderDashboard();
+    await userEvent.click(await screen.findByRole('button', { name: 'Archive First' }));
+    expect(api.get).toHaveBeenCalledWith('/projects', { params: { archived: 'all' } });
+    expect(api.put).toHaveBeenCalledWith('/projects/one/archive', { archived: true });
+    expect(screen.queryByRole('button', { name: 'Open First' })).not.toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Project status' }), 'archived');
+    await userEvent.click(screen.getByRole('button', { name: 'Open First' }));
+    expect(await screen.findByText(/This project is archived/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add Task' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /Back to Projects/ }));
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Project status' }), 'archived');
+    await userEvent.click(screen.getByRole('button', { name: 'Restore First' }));
+    expect(api.put).toHaveBeenCalledWith('/projects/one/archive', { archived: false });
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Project status' }), 'active');
+    await userEvent.click(screen.getByRole('button', { name: 'Open First' }));
+    expect(await screen.findByRole('button', { name: 'Add Task' })).toBeInTheDocument();
+});
+
 it('ignores an old project response after the user opens another project', async () => {
     let finishFirst;
     api.get.mockImplementation((url, config) => {

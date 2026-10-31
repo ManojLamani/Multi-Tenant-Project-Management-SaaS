@@ -8,6 +8,7 @@ TaskForge is a React and Express application for teams to manage projects in iso
 - JWT authentication with password hashes excluded from API responses.
 - Owner, manager, and member permissions enforced by the API.
 - Project creation, editing, and transactional deletion of associated tasks/history.
+- Project archive/restore with active, archived, and all-project views and read-only task history.
 - Tasks with assignees, priorities, due dates, status, and completion attribution.
 - Task editing/deletion, search, and status/priority/assignee filters.
 - Table and Kanban views with project completion and overdue-task metrics.
@@ -108,6 +109,7 @@ Never put database credentials or JWT signing secrets in frontend variables. Rea
 | --- | --- | --- | --- |
 | View workspace projects, tasks, team, activity | Yes | Yes | Yes |
 | Create/edit projects | Yes | Yes | No |
+| Archive/restore projects | Yes | Yes | No |
 | Delete projects and associated tasks/history | Yes | No | No |
 | Create/edit task content, assignment, priority, due date | Yes | Yes | No |
 | Change task status | Yes | Yes | Yes |
@@ -127,6 +129,7 @@ Protected routes require `Authorization: Bearer <token>`. IDs are MongoDB Object
 | GET | `/api/auth/me` | Current user. |
 | GET / POST | `/api/projects` | List/create workspace projects. |
 | PUT / DELETE | `/api/projects/:id` | Edit/delete a workspace project. |
+| PUT | `/api/projects/:id/archive` | Owner/manager archives or restores a project with `{ "archived": true }` or `{ "archived": false }`. |
 | GET | `/api/projects/:id/activity` | Latest 50 task events for an accessible project. |
 | GET / POST | `/api/tasks` | List/create tasks. |
 | PUT / DELETE | `/api/tasks/:id` | Edit/delete an accessible task. |
@@ -136,6 +139,14 @@ Protected routes require `Authorization: Bearer <token>`. IDs are MongoDB Object
 | GET | `/api/ready` | Database connection readiness (200 or 503). |
 
 Task listing accepts combined `projectId`, `status`, `priority`, `assignedTo`, and `q` query parameters. Search treats text literally. The interface filters the loaded project's tasks locally. Existing tasks without planning metadata appear as medium priority, unassigned, and without a due date. Activity history starts with changes made after the feature is installed.
+
+## Archive completed projects
+
+Owners and managers can choose **Archive** on a project card. Archived projects leave the default active view; use **Project status → Archived projects** to open them or restore them. All workspace roles can still read their tasks and task activity. Project edits and task creation, editing, status changes, and deletion return HTTP 409 while the project is archived. Table and board controls are read only. Restore the project to resume those operations under the usual role permissions.
+
+Archiving preserves all tasks and history. A task transaction that loses a race with archiving is rolled back, including any activity entry. An owner can still choose **Delete** to permanently remove an archived project and its associated data after confirmation.
+
+`GET /api/projects` returns active projects by default. Use `?archived=true` for archived projects, `?archived=false` for active projects, or `?archived=all` for both. Unsupported or repeated archive filter values return HTTP 400. The interface loads both groups and filters locally. Existing projects without `archivedAt` remain active without a data migration. Deploy the frontend and backend together so the interface can access the archive/restore endpoint and display read-only controls.
 
 ## Validation
 
