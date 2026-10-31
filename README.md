@@ -196,7 +196,7 @@ node --test .github/scripts/contribution-labels.test.cjs
 
 - **Frontend:** build `frontend` with `npm run build` and serve `dist`. Set `VITE_API_URL` to the HTTPS backend URL ending in `/api` before building. Configure SPA fallback routing to `index.html` for direct `/register` and `/dashboard` requests, including invitation links.
 - **Backend:** install dependencies in `backend`, configure the environment, and run `npm start` with `NODE_ENV=production`. Use a MongoDB replica set and include the deployed frontend origin in `CLIENT_ORIGINS`.
-- **Vercel:** use `frontend` as the Root Directory, the Vite preset, and `dist` as the output directory. The routing configuration is tracked in [PR #16](https://github.com/ManojLamani/Multi-Tenant-Project-Management-SaaS/pull/16).
+- **Vercel:** use `frontend` as the Root Directory, the Vite preset, and `dist` as the output directory. The included `frontend/vercel.json` rewrites client routes to `index.html`, including `/register#invite=...` invitation links whose fragments are read by the browser after the page loads.
 - **Verify:** check `/api/ping` and `/api/ready`, direct page loads, login, and a complete owner/member workflow. Deploy frontend and API changes together when their contracts change.
 
 **Verification status:** the 31 October 2026 audit passed local full-stack checks, but public API health probes timed out and direct frontend routes returned 404. Production end-to-end verification remains pending; passing CI alone does not establish deployment readiness.
