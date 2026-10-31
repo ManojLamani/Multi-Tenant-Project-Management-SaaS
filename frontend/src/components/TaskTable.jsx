@@ -10,6 +10,8 @@ export default function TaskTable({ project, tasks, team = [], pendingTasks = []
     const [assignee, setAssignee] = useState('');
     const [editing, setEditing] = useState(null);
     const [view, setView] = useState('table');
+    const readOnly = Boolean(project.archivedAt);
+    const canEdit = canCreate && !readOnly;
     const visibleTasks = tasks.filter(task =>
         `${task.title} ${task.description || ''}`.toLowerCase().includes(search.toLowerCase()) &&
         (!status || task.status === status) &&
@@ -26,7 +28,8 @@ export default function TaskTable({ project, tasks, team = [], pendingTasks = []
                 </div>
             </div>
             <TaskOverview tasks={tasks} />
-            {canCreate && <section className="create-section">
+            {readOnly && <p role="status">This project is archived. Its tasks and activity are read only. Ask an owner or manager to restore it before making changes.</p>}
+            {canEdit && <section className="create-section">
                 <h3>Create New Task</h3>
                 <TaskForm team={team} onSave={onCreateTask} submitLabel="Add Task" />
             </section>}
@@ -45,24 +48,24 @@ export default function TaskTable({ project, tasks, team = [], pendingTasks = []
             </section>
             <p role="status">Showing {visibleTasks.length} of {tasks.length} tasks</p>
             <div className="task-actions" aria-label="Task view"><button className="btn-secondary" aria-pressed={view === 'table'} onClick={() => setView('table')}>Table view</button><button className="btn-secondary" aria-pressed={view === 'board'} onClick={() => setView('board')}>Board view</button></div>
-            {editing && <section className="create-section" aria-label="Edit task">
+            {editing && canEdit && <section className="create-section" aria-label="Edit task">
                 <h3>Edit Task</h3>
                 <TaskForm key={editing._id} task={editing} team={team} onSave={values => onUpdateTask(editing._id, values)} onSaved={() => setEditing(null)} onCancel={() => setEditing(null)} submitLabel="Save Task" />
             </section>}
-            {view === 'board' ? <KanbanBoard tasks={visibleTasks} canManage={canCreate} pendingTasks={pendingTasks} onMoveTask={onMoveTask} onEditTask={setEditing} onDeleteTask={onDeleteTask} /> : <section className="table-container">
+            {view === 'board' ? <KanbanBoard tasks={visibleTasks} canManage={canEdit} readOnly={readOnly} pendingTasks={pendingTasks} onMoveTask={onMoveTask} onEditTask={setEditing} onDeleteTask={onDeleteTask} /> : <section className="table-container">
                 {!visibleTasks.length ? <p className="no-projects empty-state">{tasks.length ? 'No tasks match your filters.' : 'No tasks found for this project yet.'}</p> :
                     <table className="task-table">
-                        <thead><tr><th>Task</th><th>Assignee</th><th>Priority</th><th>Due date</th><th>Completed by</th><th>Status</th>{canCreate && <th>Actions</th>}</tr></thead>
+                        <thead><tr><th>Task</th><th>Assignee</th><th>Priority</th><th>Due date</th><th>Completed by</th><th>Status</th>{canEdit && <th>Actions</th>}</tr></thead>
                         <tbody>{visibleTasks.map(task => <tr key={task._id}>
                             <td><strong>{task.title}</strong><p>{task.description}</p></td>
                             <td>{task.assignedTo?.name || 'Unassigned'}</td>
                             <td><span className={`priority-badge priority-${task.priority || 'medium'}`}>{task.priority || 'medium'}</span></td>
                             <td>{task.dueDate?.slice(0, 10) || 'No due date'}</td>
                             <td>{task.status === 'done' ? task.completedBy?.name || '—' : '—'}</td>
-                            <td><select aria-label={`Status for ${task.title}`} className="table-status-select" value={task.status} disabled={pendingTasks.includes(task._id)} onChange={event => onMoveTask(task._id, event.target.value)}>
+                            <td><select aria-label={`Status for ${task.title}`} className="table-status-select" value={task.status} disabled={readOnly || pendingTasks.includes(task._id)} onChange={event => onMoveTask(task._id, event.target.value)}>
                                 <option value="todo">Todo</option><option value="in-progress">In Progress</option><option value="done">Done</option>
                             </select></td>
-                            {canCreate && <td className="task-actions"><button className="btn-secondary" disabled={pendingTasks.includes(task._id)} onClick={() => setEditing(task)}>Edit {task.title}</button><button className="btn-secondary" disabled={pendingTasks.includes(task._id)} onClick={() => onDeleteTask(task._id)}>Delete {task.title}</button></td>}
+                            {canEdit && <td className="task-actions"><button className="btn-secondary" disabled={pendingTasks.includes(task._id)} onClick={() => setEditing(task)}>Edit {task.title}</button><button className="btn-secondary" disabled={pendingTasks.includes(task._id)} onClick={() => onDeleteTask(task._id)}>Delete {task.title}</button></td>}
                         </tr>)}</tbody>
                     </table>}
             </section>}

@@ -35,7 +35,7 @@ export default function Dashboard() {
         let active = true;
         setLoading(true);
         setLoadError('');
-        Promise.all([api.get('/auth/me'), api.get('/projects'), api.get('/users')]).then(([profile, projectList, members]) => {
+        Promise.all([api.get('/auth/me'), api.get('/projects', { params: { archived: 'all' } }), api.get('/users')]).then(([profile, projectList, members]) => {
             if (!active) return;
             setUser(profile.data.user);
             setProjects(projectList.data);
@@ -116,6 +116,16 @@ export default function Dashboard() {
         } catch (error) { return failure(error, 'Could not delete the project.'); }
     }
 
+    async function archiveProject(id, archived) {
+        setFeedback('');
+        try {
+            const response = await api.put(`/projects/${id}/archive`, { archived });
+            setProjects(previous => previous.map(project => project._id === id ? response.data : project));
+            setSelectedProject(previous => previous?._id === id ? response.data : previous);
+            return true;
+        } catch (error) { return failure(error, 'Could not change the archive status.'); }
+    }
+
     async function createTask(values) {
         const visit = activeProject.current;
         const projectId = visit.projectId;
@@ -160,7 +170,7 @@ export default function Dashboard() {
         </nav>
         <main className="main-content">
             {feedback && <div className="feedback" role="alert">{feedback} <button className="btn-secondary" onClick={() => setFeedback('')}>Dismiss</button></div>}
-            {view === 'projects' && <ProjectList projects={projects} canCreate={canManage} canDelete={user.role === 'owner'} onCreateProject={createProject} onUpdateProject={updateProject} onDeleteProject={deleteProject} onOpenProject={openProject} />}
+            {view === 'projects' && <ProjectList projects={projects} canCreate={canManage} canDelete={user.role === 'owner'} onCreateProject={createProject} onUpdateProject={updateProject} onDeleteProject={deleteProject} onArchiveProject={archiveProject} onOpenProject={openProject} />}
             {view === 'tasks' && selectedProject && <>
                 {tasksLoading ? <><button className="btn-secondary" onClick={back}>Back to Projects</button><p role="status">Loading tasks…</p></> : tasksError ? <><button className="btn-secondary" onClick={back}>Back to Projects</button><p role="alert">{tasksError}</p><button className="btn-primary" onClick={() => openProject(selectedProject)}>Retry tasks</button></> :
                     <TaskTable key={`tasks-${selectedProject._id}`} project={selectedProject} tasks={tasks} team={team} pendingTasks={pendingTasks} canCreate={canManage} onBack={back} onCreateTask={createTask} onUpdateTask={mutateTask} onMoveTask={(id, status) => mutateTask(id, { status })} onDeleteTask={id => window.confirm('Delete this task permanently?') && mutateTask(id, null, true)} />}

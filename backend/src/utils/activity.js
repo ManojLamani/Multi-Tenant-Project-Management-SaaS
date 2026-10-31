@@ -2,9 +2,14 @@ import Activity from "../models/Activity.js";
 import Project from "../models/Project.js";
 
 export async function touchProject(projectId, workspaceId, session) {
-    // Writing the parent serializes task changes against concurrent project deletion.
-    const result = await Project.updateOne({ _id: projectId, workspaceId }, { $set: { updatedAt: new Date() } }, { session });
-    if (!result.matchedCount) throw Object.assign(new Error("Project not found"), { status: 404 });
+    // Incrementing the parent version serializes task changes with archive/delete,
+    // even when concurrent requests have the same millisecond timestamp.
+    const result = await Project.updateOne({ _id: projectId, workspaceId, archivedAt: null },
+        { $inc: { __v: 1 } }, { session });
+    if (!result.matchedCount) {
+        const exists = await Project.exists({ _id: projectId, workspaceId }).session(session);
+        throw Object.assign(new Error(exists ? "Restore the archived project before making changes" : "Project not found"), { status: exists ? 409 : 404 });
+    }
 }
 
 function value(item) {

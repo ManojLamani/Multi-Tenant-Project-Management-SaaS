@@ -9,6 +9,17 @@ function view(props = {}) {
 }
 
 describe('task permissions in the interface', () => {
+    it('keeps archived projects read only in both table and board views, even for owners', async () => {
+        view({ project: { _id: 'project-1', name: 'Release', archivedAt: '2026-10-01T10:00:00Z' }, canCreate: true });
+        expect(screen.getByText(/This project is archived/)).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Add Task' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Edit Review release' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Delete Review release' })).not.toBeInTheDocument();
+        expect(screen.getByRole('combobox', { name: 'Status for Review release' })).toBeDisabled();
+        await userEvent.click(screen.getByRole('button', { name: 'Board view' }));
+        expect(screen.getByRole('combobox', { name: 'Move Review release' })).toBeDisabled();
+        expect(screen.queryByRole('button', { name: 'Edit Review release' })).not.toBeInTheDocument();
+    });
     it('lets members update status without displaying task creation', async () => {
         const onMoveTask = vi.fn();
         view({ onMoveTask });
